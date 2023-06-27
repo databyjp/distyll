@@ -164,7 +164,7 @@ def suggest_topics_with_weaviate(query_str: str, client) -> str:
     Deliver the topics as a short list, each separated by two consecutive newlines like `\n\n`
 
     If the following information does not includes information about {query_str}, 
-    tell the user that the information could not be found.
+    tell the user that not enough information could not be found.
     =====
     """
 
@@ -178,67 +178,3 @@ def suggest_topics_with_weaviate(query_str: str, client) -> str:
         .do()
     )
     return get_generated_result(response)
-
-
-# def summarize_chunk(long_text: str) -> str:
-#     # TODO - input a real summarizer
-#     return long_text[:10]
-#
-#
-# def build_summary(source_path: Path, max_context_length: int = 2000) -> str:
-#     """
-#     Build a summary of the source data
-#     :param source_path: Path of source file
-#     :param max_context_length: Maximum length for sending chunks to be summarized
-#     :return:
-#     """
-#     source_data = load_data(source_path)
-#     chunks = chunk_text_by_num_words(source_data, max_context_length)
-#     summary_list = list()
-#     for c in chunks:
-#         summary_list.append(summarize_chunk(c))
-#     summary_text = "\n".join(summary_list)
-#     return summary_text
-#
-#
-# def get_llm_response(source_text: str) -> str:
-#     # TODO - Use an LLM to get a list of topics from a text
-#     return "cats at home\n\ncats at work"
-#
-#
-# def get_suggested_subtopics(source_path: Path, source_topic: str) -> list:
-#     """
-#     Return a list of sub-topics that a user could dive into, from the given topic
-#     :param source_path: Path of source file
-#     :return:
-#     """
-#     summary_text = build_summary(source_path)
-#     topics_list = list()
-#     item_sep = "\n\n"
-#     topic_prompt = f"""
-#     Based on the following text, suggest a list of three to six related sub-topics
-#     related to {source_topic} that the user might learn about.
-#     Deliver the topics as a short list, each separated by two consecutive newlines like {item_sep}
-#
-#     =====
-#
-#     Source text:
-#     {summary_text}
-#     =====
-#
-#     Sub-topics:
-#     """
-#
-#     llm_response = get_llm_response(topic_prompt)
-#
-#     topics_list = llm_response.split(item_sep)
-#
-#     return topics_list
-#
-#
-# def prompt_user_for_input():
-#     return True
-#
-#
-# def generate_summary_from_input():
-#     return True
