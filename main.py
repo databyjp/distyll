@@ -1,8 +1,10 @@
-from pathlib import Path
 import weaviate
 from weaviate import Client
-from weaviate.util import generate_uuid5
 from dataclasses import dataclass
+
+from weaviate.util import generate_uuid5
+
+from utils import chunk_text, build_weaviate_object
 
 WV_CLASS = "Knowledge_chunk"
 BASE_CLASS_OBJ = {
@@ -17,8 +19,7 @@ WV_SCHEMA = {
         BASE_CLASS_OBJ
     ]
 }
-MAX_CHUNK_WORDS = 100
-MAX_N_CHUNKS = 1 + (1000 // MAX_CHUNK_WORDS)
+
 
 
 @dataclass
@@ -28,76 +29,37 @@ class SourceData:
 
 
 def instantiate_weaviate() -> Client:
+    """
+    Instantiate Weaviate
+    :return:
+    """
     client = weaviate.Client("http://localhost:8080")
-    if not client.schema.contains({"class": WV_CLASS, "properties": []}):
-        print("Creating a new class:")
-        client.schema.create(WV_SCHEMA)
-    else:
-        print("Skipping class creation")
     return client
 
 
-def load_txt_file(txt_path: Path = None) -> str:
+def add_default_class(client: Client) -> bool:
     """
-    Load a text (.txt) file and return the resulting string
-    :param txt_path: Path of text file
+    Add the default class to be used with this knowledge base DB
+    :param client:
     :return:
     """
-    if txt_path is None:
-        txt_path = Path("data/kubernetes_concepts_overview.txt")
-    return txt_path.read_text()
-
-
-def load_wiki_page(wiki_title: str) -> str:
-    import wikipediaapi
-    wiki_en = wikipediaapi.Wikipedia('en')
-    page_py = wiki_en.page(wiki_title)
-    if page_py.exists():
-        return page_py.summary
+    if not client.schema.contains({"class": WV_CLASS, "properties": []}):
+        print("Creating a new class:")
+        client.schema.create(WV_SCHEMA)
+        return True
     else:
-        print(f"Could not find a page called {wiki_title}.")
+        print("Skipping class creation")
+        return True
 
 
-def load_data(source_path: Path) -> str:
-    return load_txt_file(source_path)  # TODO - add other media types
-
-
-def chunk_text(str_in: str) -> list:
-    # TODO - add other chunking methods
-    return chunk_text_by_num_words(str_in)
-
-
-def chunk_text_by_num_words(str_in: str, max_chunk_words: int = MAX_CHUNK_WORDS, overlap: float = 0.25) -> list:
+def instantiate_db() -> Client:
     """
-    Chunk text input into a list of strings
-    :param str_in: Input string to be chunked
-    :param max_chunk_words: Maximum length of chunk, in words
-    :param overlap: Overlap as a percentage of chunk_words
-    :return: return a list of words
+    Instantiate this knowledge database & return the client object
+    :return:
     """
-    sep = " "
-    overlap_words = int(max_chunk_words * overlap)
-
-    str_in = str_in.strip()
-    word_list = str_in.split(sep)
-    chunks_list = list()
-
-    n_chunks = ((len(word_list) - 1 + overlap_words) // max_chunk_words) + 1
-    for i in range(n_chunks):
-        window_words = word_list[
-                       max(max_chunk_words * i - overlap_words, 0):
-                       max_chunk_words * (i + 1)
-                       ]
-        chunks_list.append(sep.join(window_words))
-    return chunks_list
-
-
-def build_weaviate_object(chunk: str, object_data: dict) -> dict:
-    wv_object = dict()
-    for k, v in object_data.items():
-        wv_object[k] = v
-    wv_object["body"] = chunk
-    return wv_object
+    client = instantiate_weaviate()
+    add_default_class(client)
+    return client
 
 
 def add_to_weaviate(source_data: SourceData, client: Client) -> int:
@@ -123,58 +85,3 @@ def add_to_weaviate(source_data: SourceData, client: Client) -> int:
             counter += 1
 
     return counter  # TODO add error handling
-
-
-def get_generated_result(weaviate_response: dict) -> str:
-    return weaviate_response["data"]["Get"][WV_CLASS][0]["_additional"]["generate"]["groupedResult"]
-
-
-def generate_summary_with_weaviate(query_str: str, client) -> str:
-
-    topic_prompt = f"""
-    Based on the following text snippets, answer the following question
-    If the information does not include relevant information, 
-    do not answer the question, and indicate as such to the user.
-    
-    =====
-    QUESTION: {query_str}.
-    =====
-    
-    ANSWER:
-    """
-
-    response = (
-        client.query.get(WV_CLASS, ["body"])
-        .with_near_text({"concepts": [query_str]})
-        .with_limit(MAX_N_CHUNKS)
-        .with_generate(
-            grouped_task=topic_prompt
-        )
-        .do()
-    )
-
-    return get_generated_result(response)
-
-
-def suggest_topics_with_weaviate(query_str: str, client) -> str:
-    topic_prompt = f"""
-    If the following text does includes information about {query_str}, 
-    extract a list of three to six related sub-topics
-    related to {query_str} that the user might learn about.
-    Deliver the topics as a short list, each separated by two consecutive newlines like `\n\n`
-
-    If the following information does not includes information about {query_str}, 
-    tell the user that not enough information could not be found.
-    =====
-    """
-
-    response = (
-        client.query.get(WV_CLASS, ["body"])
-        .with_near_text({"concepts": [query_str]})
-        .with_limit(MAX_N_CHUNKS)
-        .with_generate(
-            grouped_task=topic_prompt
-        )
-        .do()
-    )
-    return get_generated_result(response)
