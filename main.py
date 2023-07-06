@@ -1,10 +1,8 @@
 import weaviate
 from weaviate import Client
 from dataclasses import dataclass
-
 from weaviate.util import generate_uuid5
-
-from utils import chunk_text, build_weaviate_object
+from utils import chunk_text, build_weaviate_object, load_wiki_page, load_data
 
 WV_CLASS = "Knowledge_chunk"
 BASE_CLASS_OBJ = {
@@ -19,7 +17,6 @@ WV_SCHEMA = {
         BASE_CLASS_OBJ
     ]
 }
-
 
 
 @dataclass
@@ -48,11 +45,11 @@ def add_default_class(client: Client) -> bool:
         client.schema.create(WV_SCHEMA)
         return True
     else:
-        print("Skipping class creation")
+        print("Found class. Skipping class creation")
         return True
 
 
-def instantiate_db() -> Client:
+def start_db() -> Client:
     """
     Instantiate this knowledge database & return the client object
     :return:
@@ -62,10 +59,46 @@ def instantiate_db() -> Client:
     return client
 
 
-def add_to_weaviate(source_data: SourceData, client: Client) -> int:
+def add_wiki_article(
+    client: Client, wiki_title: str
+) -> int:
+    """
+    Add a wikipedia article to the DB
+    :param client:
+    :param wiki_title: Title of the Wiki page to add
+    :return:
+    """
+    src_data = SourceData(
+        source_path=wiki_title,
+        source_text=load_wiki_page(wiki_title)
+    )
+    return add_to_weaviate(src_data, client)
+
+
+def add_text_file(
+    client: Client, text_file_path: str
+) -> int:
+    """
+    Add a text file to the DB
+    :param client:
+    :param text_file_path: Local path to the text file to add
+    :return:
+    """
+    from pathlib import Path
+    filepath = Path(text_file_path)
+    src_data = SourceData(
+        source_path=text_file_path,
+        source_text=load_data(filepath)
+    )
+    return add_to_weaviate(src_data, client)
+
+
+def add_to_weaviate(
+        source_data: SourceData, client: Client,
+) -> int:
     """
     Add objects to Weaviate
-    :param source_data: Dict of source data, with "source_path" and "source_text"
+    :param source_data: DataClass of source data, with "source_path" and "source_text"
     :param client: Weaviate client object for adding object
     :return:
     """

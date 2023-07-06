@@ -12,6 +12,12 @@ class Collection:
         self.target_class = target_class
 
     def text_search(self, neartext_query: str, limit: int = 10) -> list:
+        """
+        Wrapper for a nearText search
+        :param neartext_query:
+        :param limit:
+        :return:
+        """
         class_response = self.client.schema.get(self.target_class)
         properties = [c["name"] for c in class_response["properties"]]
         response = (
@@ -25,55 +31,104 @@ class Collection:
         return resp_data
 
     def _get_generated_result(self, weaviate_response: dict) -> str:
+        """
+        Parse the generated results
+        :param weaviate_response:
+        :return:
+        """
         return weaviate_response["data"]["Get"][self.target_class][0]["_additional"]["generate"]["groupedResult"]
 
-    def generate_summary(self, query_str: str) -> str:
-        topic_prompt = f"""
-        Based on the following text snippets, answer the following question
-        If the information does not include relevant information, 
-        do not answer the question, and indicate as such to the user.
-    
-        =====
-        QUESTION: {query_str}.
-        =====
-    
-        ANSWER:
+    def _get_grouped_task(
+            self, query_str: str,
+            topic_prompt: str,
+            obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
+            debug: bool = False
+    ) -> str:
         """
-
+        Get a grouped set of results and *something*
+        :param query_str:
+        :param topic_prompt:
+        :param obj_limit:
+        :param max_distance:
+        :param debug:
+        :return:
+        """
         response = (
             self.client.query.get(self.target_class, ["body"])
-            .with_near_text({"concepts": [query_str]})
-            .with_limit(MAX_N_CHUNKS)
+            .with_near_text(
+                {
+                    "concepts": [query_str],
+                    "distance": max_distance
+                }
+            )
+            .with_limit(obj_limit)
             .with_generate(
                 grouped_task=topic_prompt
             )
             .do()
         )
 
-        return self._get_generated_result(response)
+        if debug:
+            return response
+        else:
+            return self._get_generated_result(response)
 
-    def suggest_topics_with_weaviate(self, query_str: str) -> str:
+    def generate_summary(
+            self, query_str: str,
+            obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
+            debug: bool = False
+    ) -> str:
+        """
+        Given a topic, summarise relevant contents of the DB
+        :param query_str:
+        :param obj_limit:
+        :param max_distance:
+        :param debug:
+        :return:
+        """
+        topic_prompt = f"""
+        Based on the following text, summarize any information relating to {query_str}.
+        If the text does not contain required information, 
+        do not answer the question, and indicate as such to the user.
+        """
+
+        return self._get_grouped_task(
+            query_str,
+            topic_prompt,
+            obj_limit=obj_limit, max_distance=max_distance,
+            debug=debug
+        )
+
+    def suggest_topics_to_learn(
+            self, query_str: str,
+            obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
+            debug: bool = False
+    ) -> str:
+        """
+        Given a topic, suggest sub-topics to learn based on contents of the DB
+        :param query_str:
+        :param obj_limit:
+        :param max_distance:
+        :param debug:
+        :return:
+        """
         topic_prompt = f"""
         If the following text does includes information about {query_str}, 
         extract a list of three to six related sub-topics
         related to {query_str} that the user might learn about.
         Deliver the topics as a short list, each separated by two consecutive newlines like `\n\n`
-    
+
         If the following information does not includes information about {query_str}, 
         tell the user that not enough information could not be found.
         =====
         """
 
-        response = (
-            self.client.query.get(self.target_class, ["body"])
-            .with_near_text({"concepts": [query_str]})
-            .with_limit(MAX_N_CHUNKS)
-            .with_generate(
-                grouped_task=topic_prompt
-            )
-            .do()
+        return self._get_grouped_task(
+            query_str,
+            topic_prompt,
+            obj_limit=obj_limit, max_distance=max_distance,
+            debug=debug
         )
-        return self._get_generated_result(response)
 
 
 def load_txt_file(txt_path: Path = None) -> str:
@@ -88,6 +143,11 @@ def load_txt_file(txt_path: Path = None) -> str:
 
 
 def load_wiki_page(wiki_title: str) -> str:
+    """
+    Load contents of a Wiki page
+    :param wiki_title:
+    :return:
+    """
     import wikipediaapi
     wiki_en = wikipediaapi.Wikipedia('en')
     page_py = wiki_en.page(wiki_title)
@@ -98,11 +158,20 @@ def load_wiki_page(wiki_title: str) -> str:
 
 
 def load_data(source_path: Path) -> str:
+    """
+    Load various data types
+    :param source_path:
+    :return:
+    """
     return load_txt_file(source_path)  # TODO - add other media types
 
 
 def chunk_text(str_in: str) -> list:
-    # TODO - add other chunking methods
+    """
+    Chunk longer text
+    :param str_in:
+    :return:
+    """
     return chunk_text_by_num_words(str_in)
 
 
@@ -132,6 +201,12 @@ def chunk_text_by_num_words(str_in: str, max_chunk_words: int = MAX_CHUNK_WORDS,
 
 
 def build_weaviate_object(chunk: str, object_data: dict) -> dict:
+    """
+    Build a Weaviate object after chunking
+    :param chunk:
+    :param object_data:
+    :return:
+    """
     wv_object = dict()
     for k, v in object_data.items():
         wv_object[k] = v
