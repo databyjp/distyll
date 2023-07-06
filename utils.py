@@ -1,8 +1,17 @@
 from pathlib import Path
 from weaviate import Client
+from dataclasses import dataclass
+from weaviate.util import generate_uuid5
 
 MAX_CHUNK_WORDS = 100
 MAX_N_CHUNKS = 1 + (1000 // MAX_CHUNK_WORDS)
+WV_CLASS = "Knowledge_chunk"
+
+
+@dataclass
+class SourceData:
+    source_path: str
+    source_text: str
 
 
 class Collection:
@@ -10,6 +19,61 @@ class Collection:
     def __init__(self, client: Client, target_class: str):
         self.client = client
         self.target_class = target_class
+
+    def add_text_file(
+            self, text_file_path: str
+    ) -> int:
+        """
+        Add a text file to the DB
+        :param text_file_path: Local path to the text file to add
+        :return:
+        """
+        from pathlib import Path
+        filepath = Path(text_file_path)
+        src_data = SourceData(
+            source_path=text_file_path,
+            source_text=load_data(filepath)
+        )
+        return self.add_to_weaviate(src_data)
+
+    def add_wiki_article(
+            self, wiki_title: str
+    ) -> int:
+        """
+        Add a wikipedia article to the DB
+        :param wiki_title: Title of the Wiki page to add
+        :return:
+        """
+        src_data = SourceData(
+            source_path=wiki_title,
+            source_text=load_wiki_page(wiki_title)
+        )
+        return self.add_to_weaviate(src_data)
+
+    def add_to_weaviate(
+            self, source_data: SourceData
+    ) -> int:
+        """
+        Add objects to Weaviate
+        :param source_data: DataClass of source data, with "source_path" and "source_text"
+        :return:
+        """
+        chunks = chunk_text(source_data.source_text)
+        object_data = {
+            "source_path": str(source_data.source_path)
+        }
+        counter = 0
+        with self.client.batch() as batch:
+            for c in chunks:
+                wv_obj = build_weaviate_object(c, object_data)
+                batch.add_data_object(
+                    class_name=WV_CLASS,
+                    data_object=wv_obj,
+                    uuid=generate_uuid5(wv_obj)
+                )
+                counter += 1
+
+        return counter  # TODO add error handling
 
     def text_search(self, neartext_query: str, limit: int = 10) -> list:
         """
