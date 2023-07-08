@@ -3,17 +3,20 @@ from weaviate import Client
 from weaviate.util import generate_uuid5
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
-MAX_CHUNK_WORDS = 100
-MAX_N_CHUNKS = 1 + (1000 // MAX_CHUNK_WORDS)
+MAX_CHUNK_WORDS = 100  # Max chunk size - in words
+MAX_CONTEXT_LENGTH = 1000
+MAX_N_CHUNKS = 1 + (MAX_CONTEXT_LENGTH // MAX_CHUNK_WORDS)
 WV_CLASS = "Knowledge_chunk"
+DB_BODY_PROPERTY = "body"
 
 BASE_CLASS_OBJ = {
     "class": WV_CLASS,
     "vectorizer": "text2vec-openai",
     "moduleConfig": {
         "generate-openai": []
-    }
+    },
 }
 WV_SCHEMA = {
     "classes": [
@@ -34,12 +37,49 @@ class Collection:
         self.client = client
         self.target_class = target_class
 
+    def _get_property_names(self) -> list[str]:
+        """
+        Get property names from a Weaviate class
+        :param class_name:
+        :return:
+        """
+        class_schema = self.client.schema.get(self.target_class)
+        return [p["name"] for p in class_schema["properties"]]
+
     def _add_text(self, source_path: str, source_text: str):
         src_data = SourceData(
             source_path=source_path,
             source_text=source_text
         )
-        return self.add_to_weaviate(src_data)
+        return self._add_to_weaviate(src_data)
+
+    def _add_to_weaviate(
+            self, source_data: SourceData, chunk_number_start: int = 1
+    ) -> int:
+        """
+        Add objects to Weaviate
+        :param source_data: DataClass of source data, with "source_path" and "source_text"
+        :return:
+        """
+        chunks = chunk_text(source_data.source_text)
+        object_data = {
+            "source_path": str(source_data.source_path)
+        }
+        counter = 0
+        with self.client.batch() as batch:
+            for i, c in enumerate(chunks):
+                # TODO: Add chunk number e.g. chunk N
+                # TODO: Add tag fields for convenient filtering
+                # TODO: Add Title?
+                wv_obj = build_weaviate_object(c, object_data, chunk_number=i+1)
+                batch.add_data_object(
+                    class_name=WV_CLASS,
+                    data_object=wv_obj,
+                    uuid=generate_uuid5(wv_obj)
+                )
+                counter += 1
+
+        return counter  # TODO add error handling
 
     def add_text_file(
             self, text_file_path: str
@@ -63,55 +103,15 @@ class Collection:
         """
         return self._add_text(wiki_title, load_wiki_page(wiki_title))
 
-    def add_to_weaviate(
-            self, source_data: SourceData
-    ) -> int:
-        """
-        Add objects to Weaviate
-        :param source_data: DataClass of source data, with "source_path" and "source_text"
-        :return:
-        """
-        chunks = chunk_text(source_data.source_text)
-        object_data = {
-            "source_path": str(source_data.source_path)
-        }
-        counter = 0
-        with self.client.batch() as batch:
-            for c in chunks:
-                wv_obj = build_weaviate_object(c, object_data)
-                batch.add_data_object(
-                    class_name=WV_CLASS,
-                    data_object=wv_obj,
-                    uuid=generate_uuid5(wv_obj)
-                )
-                counter += 1
-
-        return counter  # TODO add error handling
-
-    def add_from_youtube(self, youtube_url: str):
-
-        import yt_dlp
-        import openai
-        import os
-
+    def add_from_youtube(self, youtube_url: str) -> int:
         outpath = 'temp_audio.mp3'
+        download_audio(youtube_url, outpath)
+        transcript_texts = _get_transcripts_from_audio_file(outpath)
 
-        def download_audio(link: str):
-            with yt_dlp.YoutubeDL({'extract_audio': True, 'format': 'bestaudio', 'outtmpl': outpath}) as video:
-                info_dict = video.extract_info(link, download=True)
-                video_title = info_dict['title']
-                print(f"Found {video_title} - downloading")
-                video.download(link)
-                print(f"Successfully Downloaded to {outpath}")
-
-        download_audio(youtube_url)
-        openai.api_key = os.environ["OPENAI_APIKEY"]
-        audio_file = open("Hello Weaviate - What Is a Vector？.mp3", "rb")
-        transcript = openai.Audio.transcribe("whisper-1", audio_file)
-        transcript_text = transcript["text"]
-        os.remove(outpath)
-
-        return self._add_text(youtube_url, transcript_text)
+        obj_count = 0
+        for transcript_text in transcript_texts:
+            obj_count += self._add_text(youtube_url, transcript_text)
+        return obj_count
 
     def text_search(self, neartext_query: str, limit: int = 10) -> list:
         """
@@ -156,7 +156,7 @@ class Collection:
         :return:
         """
         response = (
-            self.client.query.get(self.target_class, ["body"])
+            self.client.query.get(self.target_class, self._get_property_names())
             .with_near_text(
                 {
                     "concepts": [query_str],
@@ -175,7 +175,54 @@ class Collection:
         else:
             return self._get_generated_result(response)
 
-    def generate_summary(
+    def summarize_entry(
+            self, source_path: str,
+            debug: bool = False
+    ):
+        """
+        Summarize all objects for a particular entry
+        :param source_path:
+        :param debug:
+        :return:
+        """
+        """
+        Pseudocode:
+        - Get count of total objects
+        - For sets of objects able to be fit into context window:
+            - Call objects
+            - Summarize set 
+            - Concatenate summaries
+        - Join summaries into one coherent summary (if necessary)
+        """
+        where_filter = {
+            "path": ["source_path"],
+            "operator": "Equal",
+            "valueText": source_path
+        }
+        property_names = self._get_property_names()
+        topic_prompt = f"""
+        Summarize the following as a whole into a paragraph or two of text.
+        List the topics it covers, and what the reader might learn by listening to it
+        If possible, use plain, clear language rather than domain-specific jargon
+        to make the text as digestible as possible. 
+        """
+        # TODO: Use pagination to get all instances of the class
+        response = (
+            self.client.query.get(WV_CLASS, property_names)
+            .with_where(where_filter)
+            .with_limit(MAX_N_CHUNKS)
+            .with_generate(
+                grouped_task=topic_prompt
+            )
+            .do()
+        )
+
+        if debug:
+            return response
+        else:
+            return self._get_generated_result(response)
+
+    def summarize_topic(
             self, query_str: str,
             obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
             debug: bool = False
@@ -336,15 +383,78 @@ def chunk_text_by_num_words(str_in: str, max_chunk_words: int = MAX_CHUNK_WORDS,
     return chunks_list
 
 
-def build_weaviate_object(chunk: str, object_data: dict) -> dict:
+def build_weaviate_object(chunk_body: str, object_data: dict, chunk_number: int = None) -> dict:
     """
     Build a Weaviate object after chunking
-    :param chunk:
-    :param object_data:
+    :param chunk_body: Chunk text
+    :param object_data: Any other object data to be passed
+    :param chunk_number: Chunk number
     :return:
     """
     wv_object = dict()
     for k, v in object_data.items():
         wv_object[k] = v
-    wv_object["body"] = chunk
+    wv_object[DB_BODY_PROPERTY] = chunk_body
+    if chunk_number:
+        wv_object["chunk_no"] = chunk_number
     return wv_object
+
+
+def download_audio(link: str, outpath: str):
+    import yt_dlp
+    with yt_dlp.YoutubeDL({'extract_audio': True, 'format': 'bestaudio', 'outtmpl': outpath}) as video:
+        info_dict = video.extract_info(link, download=True)
+        video_title = info_dict['title']
+        print(f"Found {video_title} - downloading")
+        video.download(link)
+        print(f"Successfully Downloaded to {outpath}")
+
+
+def _get_transcripts_from_audio_file(audio_file_path: str) -> list:
+    """
+    Get transcripts of audio files using
+    :param audio_file_path:
+    :return:
+    """
+    import openai
+    import os
+
+    clip_outpaths = _split_audio_files(audio_file_path)
+    transcript_texts = list()
+    for clip_outpath in clip_outpaths:
+        openai.api_key = os.environ["OPENAI_APIKEY"]
+        audio_file = open(clip_outpath, "rb")
+        transcript = openai.Audio.transcribe("whisper-1", audio_file)
+        transcript_texts.append(transcript["text"])
+    return transcript_texts
+
+
+def _split_audio_files(audio_file_path: str) -> list:
+    """
+    Split long audio files
+    (e.g. so that they fit within the allowed size for Whisper)
+    :param audio_file_path:
+    :return: A list of file paths
+    """
+    from pydub import AudioSegment
+
+    audio = AudioSegment.from_file(audio_file_path)
+
+    # Split long audio into 15-minute clips
+    segment_len = 900
+    clip_outpaths = list()
+
+    if audio.duration_seconds > segment_len:
+        n_segments = 1 + int(audio.duration_seconds) // segment_len
+        print(f"Splitting audio to {n_segments}")
+        for i in range(n_segments):
+            start = max(0, (i * segment_len) - 10) * 1000
+            end = ((i + 1) * segment_len) * 1000
+            clip = audio[start:end]
+            clip_outpath = f"{i}_" + audio_file_path
+            clip.export(f"{i}_" + audio_file_path)
+            clip_outpaths.append(clip_outpath)
+        return clip_outpaths
+    else:
+        print(f"Audio file under {segment_len} seconds. No split required.")
+        return [audio_file_path]
