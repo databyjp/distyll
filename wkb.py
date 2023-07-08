@@ -1,11 +1,25 @@
-from pathlib import Path
+import weaviate
 from weaviate import Client
-from dataclasses import dataclass
 from weaviate.util import generate_uuid5
+from dataclasses import dataclass
+from pathlib import Path
 
 MAX_CHUNK_WORDS = 100
 MAX_N_CHUNKS = 1 + (1000 // MAX_CHUNK_WORDS)
 WV_CLASS = "Knowledge_chunk"
+
+BASE_CLASS_OBJ = {
+    "class": WV_CLASS,
+    "vectorizer": "text2vec-openai",
+    "moduleConfig": {
+        "generate-openai": []
+    }
+}
+WV_SCHEMA = {
+    "classes": [
+        BASE_CLASS_OBJ
+    ]
+}
 
 
 @dataclass
@@ -217,6 +231,40 @@ class Collection:
             obj_limit=obj_limit, max_distance=max_distance,
             debug=debug
         )
+
+
+def instantiate_weaviate() -> Client:
+    """
+    Instantiate Weaviate
+    :return:
+    """
+    client = weaviate.Client("http://localhost:8080")
+    return client
+
+
+def add_default_class(client: Client) -> bool:
+    """
+    Add the default class to be used with this knowledge base DB
+    :param client:
+    :return:
+    """
+    if not client.schema.contains({"class": WV_CLASS, "properties": []}):
+        print("Creating a new class:")
+        client.schema.create(WV_SCHEMA)
+        return True
+    else:
+        print("Found class. Skipping class creation")
+        return True
+
+
+def start_db() -> Client:
+    """
+    Instantiate this knowledge database & return the client object
+    :return:
+    """
+    client = instantiate_weaviate()
+    add_default_class(client)
+    return client
 
 
 def load_txt_file(txt_path: Path = None) -> str:
