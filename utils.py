@@ -20,6 +20,13 @@ class Collection:
         self.client = client
         self.target_class = target_class
 
+    def _add_text(self, source_path: str, source_text: str):
+        src_data = SourceData(
+            source_path=source_path,
+            source_text=source_text
+        )
+        return self.add_to_weaviate(src_data)
+
     def add_text_file(
             self, text_file_path: str
     ) -> int:
@@ -30,11 +37,7 @@ class Collection:
         """
         from pathlib import Path
         filepath = Path(text_file_path)
-        src_data = SourceData(
-            source_path=text_file_path,
-            source_text=load_data(filepath)
-        )
-        return self.add_to_weaviate(src_data)
+        return self._add_text(text_file_path, load_data(filepath))
 
     def add_wiki_article(
             self, wiki_title: str
@@ -44,11 +47,7 @@ class Collection:
         :param wiki_title: Title of the Wiki page to add
         :return:
         """
-        src_data = SourceData(
-            source_path=wiki_title,
-            source_text=load_wiki_page(wiki_title)
-        )
-        return self.add_to_weaviate(src_data)
+        return self._add_text(wiki_title, load_wiki_page(wiki_title))
 
     def add_to_weaviate(
             self, source_data: SourceData
@@ -74,6 +73,31 @@ class Collection:
                 counter += 1
 
         return counter  # TODO add error handling
+
+    def add_from_youtube(self, youtube_url: str):
+
+        import yt_dlp
+        import openai
+        import os
+
+        outpath = 'temp_audio.mp3'
+
+        def download_audio(link: str):
+            with yt_dlp.YoutubeDL({'extract_audio': True, 'format': 'bestaudio', 'outtmpl': outpath}) as video:
+                info_dict = video.extract_info(link, download=True)
+                video_title = info_dict['title']
+                print(f"Found {video_title} - downloading")
+                video.download(link)
+                print(f"Successfully Downloaded to {outpath}")
+
+        download_audio(youtube_url)
+        openai.api_key = os.environ["OPENAI_APIKEY"]
+        audio_file = open("Hello Weaviate - What Is a Vector？.mp3", "rb")
+        transcript = openai.Audio.transcribe("whisper-1", audio_file)
+        transcript_text = transcript["text"]
+        os.remove(outpath)
+
+        return self._add_text(youtube_url, transcript_text)
 
     def text_search(self, neartext_query: str, limit: int = 10) -> list:
         """
