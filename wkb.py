@@ -45,7 +45,20 @@ class Collection:
         class_schema = self.client.schema.get(self.target_class)
         return [p["name"] for p in class_schema["properties"]]
 
-    def _add_text(self, source_path: str, source_text: str):
+    def _get_entry_count(self, source_path: str) -> int:
+        res = (
+            self.client.query.aggregate(WV_CLASS)
+            .with_where({
+                "path": "source_path",
+                "operator": "Equal",
+                "valueText": source_path
+            })
+            .with_meta_count()
+            .do()
+        )
+        return res["data"]["Aggregate"][WV_CLASS][0]["meta"]["count"]
+
+    def _add_text(self, source_path: str, source_text: str, chunk_number_offset: int = 0):
         """
         Add data from text input
         :param source_path:
@@ -54,12 +67,12 @@ class Collection:
         """
         src_data = SourceData(
             source_path=source_path,
-            source_text=source_text
+            source_text=source_text,
         )
-        return self._add_to_weaviate(src_data)
+        return self._add_to_weaviate(src_data, chunk_number_offset=chunk_number_offset)
 
     def _add_to_weaviate(
-            self, source_data: SourceData, chunk_number_start: int = 1
+            self, source_data: SourceData, chunk_number_offset: int = 0
     ) -> int:
         """
         Add objects to Weaviate
@@ -73,10 +86,9 @@ class Collection:
         counter = 0
         with self.client.batch() as batch:
             for i, c in enumerate(chunks):
-                # TODO: Add chunk number e.g. chunk N
                 # TODO: Add tag fields for convenient filtering
                 # TODO: Add Title?
-                wv_obj = build_weaviate_object(c, object_data, chunk_number=i+1)
+                wv_obj = build_weaviate_object(c, object_data, chunk_number=i+chunk_number_offset)
                 batch.add_data_object(
                     class_name=WV_CLASS,
                     data_object=wv_obj,
@@ -115,7 +127,7 @@ class Collection:
 
         obj_count = 0
         for transcript_text in transcript_texts:
-            obj_count += self._add_text(youtube_url, transcript_text)
+            obj_count += self._add_text(youtube_url, transcript_text, chunk_number_offset=obj_count)
         return obj_count
 
     def text_search(self, neartext_query: str, limit: int = 10) -> list:
@@ -183,7 +195,7 @@ class Collection:
     def summarize_entry(
             self, source_path: str,
             debug: bool = False
-    ):
+    ) -> str:
         """
         Summarize all objects for a particular entry
         :param source_path:
@@ -199,6 +211,7 @@ class Collection:
             - Concatenate summaries
         - Join summaries into one coherent summary (if necessary)
         """
+        entry_count = self._get_entry_count(source_path)
         where_filter = {
             "path": ["source_path"],
             "operator": "Equal",
@@ -206,26 +219,29 @@ class Collection:
         }
         property_names = self._get_all_property_names()
         topic_prompt = f"""
-        Summarize the following as a whole into a paragraph or two of text.
-        List the topics it covers, and what the reader might learn by listening to it
-        If possible, use plain, clear language rather than domain-specific jargon
-        to make the text as digestible as possible. 
+        Using plain language, summarize the following as a whole into a paragraph or two of text.
+        List the topics it covers, and what the reader might learn by listening to it. 
+        ===============
         """
-        # TODO: Use pagination to get all instances of the class
-        response = (
-            self.client.query.get(WV_CLASS, property_names)
-            .with_where(where_filter)
-            .with_limit(MAX_N_CHUNKS)
-            .with_generate(
-                grouped_task=topic_prompt
+        # TODO: Add summaries of youtube video to Weaviate so that they can be re-used
+        section_summaries = list()
+        for i in range((entry_count // MAX_N_CHUNKS) + 1):
+            response = (
+                self.client.query.get(WV_CLASS, property_names)
+                .with_where(where_filter)
+                .with_offset((i * MAX_N_CHUNKS))
+                .with_limit(MAX_N_CHUNKS)
+                .with_generate(
+                    grouped_task=topic_prompt
+                )
+                .do()
             )
-            .do()
-        )
-
+            section_summaries.append(response)
         if debug:
-            return response
+            return section_summaries
         else:
-            return self._get_generated_result(response)
+            section_summaries = [self._get_generated_result(s) for s in section_summaries]
+            return _summarize_multiple_paragraphs(section_summaries)
 
     def summarize_topic(
             self, query_str: str,
@@ -400,8 +416,8 @@ def build_weaviate_object(chunk_body: str, object_data: dict, chunk_number: int 
     for k, v in object_data.items():
         wv_object[k] = v
     wv_object[DB_BODY_PROPERTY] = chunk_body
-    if chunk_number:
-        wv_object["chunk_no"] = chunk_number
+    if chunk_number is not None:
+        wv_object["chunk_number"] = chunk_number
     return wv_object
 
 
@@ -415,19 +431,43 @@ def download_audio(link: str, outpath: str):
         print(f"Successfully Downloaded to {outpath}")
 
 
+def _summarize_multiple_paragraphs(paragraphs: list) -> str:
+    import openai
+    import os
+    openai.api_key = os.environ["OPENAI_APIKEY"]
+    topic_prompt = f"""
+    Hello! Please summarize the following as a whole into two or three paragraphs of text.
+    List the topics it covers, and what the reader might learn by listening to it
+    ================
+    {paragraphs}
+    """
+    completion = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system",
+             "content": """
+                You are a helpful assistant who can summarize information very well in 
+                clear, concise language without resorting to domain-specific jargon.
+                """
+             },
+            {"role": "user", "content": topic_prompt}
+        ]
+    )
+    return completion.choices[0].message["content"]
+
+
 def _get_transcripts_from_audio_file(audio_file_path: str) -> list:
     """
     Get transcripts of audio files using
     :param audio_file_path:
     :return:
     """
-    import openai
-    import os
 
     clip_outpaths = _split_audio_files(audio_file_path)
     transcript_texts = list()
-    for clip_outpath in clip_outpaths:
-        openai.api_key = os.environ["OPENAI_APIKEY"]
+    print(f"Getting transcripts from {len(clip_outpaths)} audio files...")
+    for i, clip_outpath in enumerate(clip_outpaths):
+        print(f"Processing transcript {i+1} of {len(clip_outpaths)}...")
         audio_file = open(clip_outpath, "rb")
         transcript = openai.Audio.transcribe("whisper-1", audio_file)
         transcript_texts.append(transcript["text"])
