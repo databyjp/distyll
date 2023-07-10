@@ -37,16 +37,21 @@ class Collection:
         self.client = client
         self.target_class = target_class
 
-    def _get_property_names(self) -> list[str]:
+    def _get_all_property_names(self) -> list[str]:
         """
         Get property names from a Weaviate class
-        :param class_name:
         :return:
         """
         class_schema = self.client.schema.get(self.target_class)
         return [p["name"] for p in class_schema["properties"]]
 
     def _add_text(self, source_path: str, source_text: str):
+        """
+        Add data from text input
+        :param source_path:
+        :param source_text:
+        :return:
+        """
         src_data = SourceData(
             source_path=source_path,
             source_text=source_text
@@ -156,7 +161,7 @@ class Collection:
         :return:
         """
         response = (
-            self.client.query.get(self.target_class, self._get_property_names())
+            self.client.query.get(self.target_class, self._get_all_property_names())
             .with_near_text(
                 {
                     "concepts": [query_str],
@@ -199,7 +204,7 @@ class Collection:
             "operator": "Equal",
             "valueText": source_path
         }
-        property_names = self._get_property_names()
+        property_names = self._get_all_property_names()
         topic_prompt = f"""
         Summarize the following as a whole into a paragraph or two of text.
         List the topics it covers, and what the reader might learn by listening to it
