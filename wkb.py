@@ -3,13 +3,18 @@ from weaviate import Client
 from weaviate.util import generate_uuid5
 from dataclasses import dataclass
 from pathlib import Path
+import openai
+import os
 from typing import Optional
+
+openai.api_key = os.environ["OPENAI_APIKEY"]
 
 MAX_CHUNK_WORDS = 100  # Max chunk size - in words
 MAX_CONTEXT_LENGTH = 1000
 MAX_N_CHUNKS = 1 + (MAX_CONTEXT_LENGTH // MAX_CHUNK_WORDS)
 WV_CLASS = "Knowledge_chunk"
 DB_BODY_PROPERTY = "body"
+CHUNK_NO_COL = "chunk_number"
 
 BASE_CLASS_OBJ = {
     "class": WV_CLASS,
@@ -157,7 +162,7 @@ class Collection:
         """
         return weaviate_response["data"]["Get"][self.target_class][0]["_additional"]["generate"]["groupedResult"]
 
-    def _get_grouped_task(
+    def _generative_with_query(
             self, query_str: str,
             topic_prompt: str,
             obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
@@ -182,7 +187,52 @@ class Collection:
             )
             .with_limit(obj_limit)
             .with_generate(
-                grouped_task=topic_prompt
+                grouped_task=topic_prompt + ("=" * 10)
+            )
+            .do()
+        )
+
+        if debug:
+            return response
+        else:
+            return self._get_generated_result(response)
+
+    def _generative_with_object(
+            self,
+            source_path: str,
+            query_str: str,
+            topic_prompt: str,
+            obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.30,
+            debug: bool = False
+    ) -> str:
+        """
+        Get a grouped set of results and *something*
+        :param source_path:
+        :param topic_prompt:
+        :param obj_limit:
+        :param max_distance:
+        :param debug:
+        :return:
+        """
+        response = (
+            self.client.query.get(self.target_class, self._get_all_property_names())
+            .with_near_text(
+                {
+                    "concepts": [query_str],
+                    "distance": max_distance
+                }
+            )
+            .with_where(
+                {
+                    "path": ["source_path"],
+                    "operator": "Equal",
+                    "valueText": source_path
+                }
+            )
+            .with_limit(obj_limit)
+            .with_sort({"path": [CHUNK_NO_COL], "order": "asc"})
+            .with_generate(
+                grouped_task=topic_prompt + ("=" * 10)
             )
             .do()
         )
@@ -202,15 +252,6 @@ class Collection:
         :param debug:
         :return:
         """
-        """
-        Pseudocode:
-        - Get count of total objects
-        - For sets of objects able to be fit into context window:
-            - Call objects
-            - Summarize set 
-            - Concatenate summaries
-        - Join summaries into one coherent summary (if necessary)
-        """
         entry_count = self._get_entry_count(source_path)
         where_filter = {
             "path": ["source_path"],
@@ -221,9 +262,8 @@ class Collection:
         topic_prompt = f"""
         Using plain language, summarize the following as a whole into a paragraph or two of text.
         List the topics it covers, and what the reader might learn by listening to it. 
-        ===============
         """
-        # TODO: Add summaries of youtube video to Weaviate so that they can be re-used
+        # TODO: Save summaries of long content to Weaviate so that they can be re-used
         section_summaries = list()
         for i in range((entry_count // MAX_N_CHUNKS) + 1):
             response = (
@@ -237,6 +277,7 @@ class Collection:
                 .do()
             )
             section_summaries.append(response)
+
         if debug:
             return section_summaries
         else:
@@ -245,7 +286,8 @@ class Collection:
 
     def summarize_topic(
             self, query_str: str,
-            obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
+            obj_limit: int = MAX_N_CHUNKS,
+            max_distance: float = 0.28,
             debug: bool = False
     ) -> str:
         """
@@ -262,12 +304,18 @@ class Collection:
         do not answer the question, and indicate as such to the user.
         """
 
-        return self._get_grouped_task(
+        return self._generative_with_query(
             query_str,
             topic_prompt,
             obj_limit=obj_limit, max_distance=max_distance,
             debug=debug
         )
+
+    def ask_object(self, source_path: str, question: str, topic_prompt: Optional[str] = None):
+        if topic_prompt is None:
+            return self._generative_with_object(source_path=source_path, query_str=question, topic_prompt=question)
+        else:
+            return self._generative_with_object(source_path=source_path, query_str=question, topic_prompt=topic_prompt)
 
     def suggest_topics_to_learn(
             self, query_str: str,
@@ -290,10 +338,9 @@ class Collection:
 
         If the following information does not includes information about {query_str}, 
         tell the user that not enough information could not be found.
-        =====
         """
 
-        return self._get_grouped_task(
+        return self._generative_with_query(
             query_str,
             topic_prompt,
             obj_limit=obj_limit, max_distance=max_distance,
@@ -417,7 +464,7 @@ def build_weaviate_object(chunk_body: str, object_data: dict, chunk_number: int 
         wv_object[k] = v
     wv_object[DB_BODY_PROPERTY] = chunk_body
     if chunk_number is not None:
-        wv_object["chunk_number"] = chunk_number
+        wv_object[CHUNK_NO_COL] = chunk_number
     return wv_object
 
 
@@ -432,13 +479,15 @@ def download_audio(link: str, outpath: str):
 
 
 def _summarize_multiple_paragraphs(paragraphs: list) -> str:
-    import openai
-    import os
-    openai.api_key = os.environ["OPENAI_APIKEY"]
+    """
+    Helper function for summarizing multiple paragraphs using an LLM
+    :param paragraphs:
+    :return:
+    """
     topic_prompt = f"""
     Hello! Please summarize the following as a whole into two or three paragraphs of text.
     List the topics it covers, and what the reader might learn by listening to it
-    ================
+    {("=" * 10)}
     {paragraphs}
     """
     completion = openai.ChatCompletion.create(

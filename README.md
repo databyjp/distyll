@@ -1,10 +1,11 @@
-## Knowledge expander
+## Personal knowledge base app
 
 ### Goals
 
-Help me perform research on a topic
+Help me learn about stuff
 
-- Perform search and ingest information based on a prompt, then suggest specific topics to learn about
+- Dump information into this database
+- Help me digest it by summarizing
 
 ### High-level methodology
 
