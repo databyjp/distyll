@@ -2,44 +2,59 @@
 
 ### Goals
 
-Help me learn about stuff
-
+Help me learn about stuff with a workflow of:
 - Dump information into this database
 - Help me digest it by summarizing
 
-### High-level methodology
+## How to use
 
-- Find information
-- Ingest information
-- Clarify intent, if possible
-- Provide information
+You'll need an Open AI api key, and a Weaviate cluster
 
-e.g. I want to learn about a TOPIC (e.g. PSVR2)
+### Connect
 
-1. Ingest information on a topic
-    1. Perform search on TOPIC
-       1. (Optional) Validate that the information relates to the same topic as the query intent
-    2. **MVP**: Get information from a Wiki page / YouTube video
-2. Ingest outputs
-   1. keys: ["source_location", "body", "vector", "import_date", "original_query"]
-   2. Chunk data to paragraphs
-   3. Vectorize data 
-3. Prompt the user on what they would like to know about the TOPIC
-   1. Prepare sub-topics to suggest. 
-      1. Prompt example: *"I am interested to know more about {TOPIC} - based on the following, suggest three to five more specific sub-topics that I could learn about."*
-   2. Suggest numerical multiple choice or user input:
-      1. Overview of TOPIC 
-      2. Prepared sub-topics
-      3. Other (type)
+Spin up the Weaviate cluster, and run this :
 
-#### Implementation
+```python
+import wkb
+client = wkb.start_db()
+collection = wkb.Collection(client, wkb.WV_CLASS)
+```
 
-User inputs:
+This will instantiate, or connect to, the knowledge base collection in Weaviate.
+
+**NOTE: If you want to preserve your data, make sure you connect it to a Weaviate instance with data persistence switched on.**
+
+### Add objects
+
+You can add objects from various sources:
+
+```python
+collection.add_text_file(PATH_TO_FILE)  # Add text from a local text file
+collection.add_wiki_article(wiki_title)  # Add Wiki article summary (use Wikipedia article title)
+collection.add_from_youtube(youtube_url)  # Add youtube video transcript (use YouTube URL)
+```
+
+They will be added like: 
+
+```json
 {
-    "init_query": "youtube.com/SOME_VIDEO_ABOUT_PSVR2",
-    "clarifications": [
-        "best games",
-        "resolution",
-        "hardware",
-    ],
+  "source_path": source_path,  // e.g. YouTube URL or Wiki title
+  "source_text": text,  // Text body (chunk)
+  "chunk_number": xx  // Chunk number if chunked from longer text
 }
+```
+
+### Query objects
+
+You can use the data like so:
+
+```python
+# Source-specific
+collection.generate_summary(youtube_url)  # Summarize the entry
+collection.generate_summary(youtube_url, "Summarize into a tweet")  # Summarize the entry, using this specific instruction
+collection.ask_object(youtube_url, "What is HNSW-FINGER?")  # Ask this particular source 
+
+# Knowledge-base wide actions
+collection.text_search("kubernetes", 2)  # Vector search
+collection.summarize_topic("kubernetes")  # Vector search & summarize results
+```

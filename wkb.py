@@ -63,6 +63,25 @@ class Collection:
         )
         return res["data"]["Aggregate"][WV_CLASS][0]["meta"]["count"]
 
+    def text_search(self, neartext_query: str, limit: int = 10) -> list:
+        """
+        Wrapper for a nearText search
+        :param neartext_query:
+        :param limit:
+        :return:
+        """
+        class_response = self.client.schema.get(self.target_class)
+        properties = [c["name"] for c in class_response["properties"]]
+        response = (
+            self.client.query.get(self.target_class, properties)
+            .with_additional("distance")
+            .with_near_text({"concepts": [neartext_query]})
+            .with_limit(limit)
+            .do()
+        )
+        resp_data = response["data"]["Get"][self.target_class]
+        return resp_data
+
     def _add_text(self, source_path: str, source_text: str, chunk_number_offset: int = 0):
         """
         Add data from text input
@@ -133,26 +152,8 @@ class Collection:
         obj_count = 0
         for transcript_text in transcript_texts:
             obj_count += self._add_text(youtube_url, transcript_text, chunk_number_offset=obj_count)
+        os.remove(outpath)
         return obj_count
-
-    def text_search(self, neartext_query: str, limit: int = 10) -> list:
-        """
-        Wrapper for a nearText search
-        :param neartext_query:
-        :param limit:
-        :return:
-        """
-        class_response = self.client.schema.get(self.target_class)
-        properties = [c["name"] for c in class_response["properties"]]
-        response = (
-            self.client.query.get(self.target_class, properties)
-            .with_additional("distance")
-            .with_near_text({"concepts": [neartext_query]})
-            .with_limit(limit)
-            .do()
-        )
-        resp_data = response["data"]["Get"][self.target_class]
-        return resp_data
 
     def _get_generated_result(self, weaviate_response: dict) -> str:
         """
@@ -244,11 +245,13 @@ class Collection:
 
     def summarize_entry(
             self, source_path: str,
+            custom_prompt: str = None,
             debug: bool = False
     ) -> str:
         """
         Summarize all objects for a particular entry
         :param source_path:
+        :param custom_prompt: A custom prompt or instruction for the final summary
         :param debug:
         :return:
         """
@@ -282,7 +285,7 @@ class Collection:
             return section_summaries
         else:
             section_summaries = [self._get_generated_result(s) for s in section_summaries]
-            return _summarize_multiple_paragraphs(section_summaries)
+            return _summarize_multiple_paragraphs(section_summaries, custom_prompt)
 
     def summarize_topic(
             self, query_str: str,
@@ -353,7 +356,7 @@ def instantiate_weaviate() -> Client:
     Instantiate Weaviate
     :return:
     """
-    client = weaviate.Client("http://localhost:8080")
+    client = weaviate.Client("http://localhost:8082")
     return client
 
 
@@ -478,18 +481,26 @@ def download_audio(link: str, outpath: str):
         print(f"Successfully Downloaded to {outpath}")
 
 
-def _summarize_multiple_paragraphs(paragraphs: list) -> str:
+def _summarize_multiple_paragraphs(paragraphs: list, topic_prompt: str = None) -> str:
     """
     Helper function for summarizing multiple paragraphs using an LLM
     :param paragraphs:
     :return:
     """
-    topic_prompt = f"""
-    Hello! Please summarize the following as a whole into two or three paragraphs of text.
-    List the topics it covers, and what the reader might learn by listening to it
-    {("=" * 10)}
-    {paragraphs}
-    """
+    if topic_prompt is None:
+        topic_prompt = f"""
+        Hello! Please summarize the following as a whole into two or three paragraphs of text.
+        List the topics it covers, and what the reader might learn by listening to it
+        {("=" * 10)}
+        {paragraphs}
+        """
+    else:
+        topic_prompt = f"""
+        {topic_prompt}
+        {("=" * 10)}
+        {paragraphs}        
+        """
+
     completion = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[

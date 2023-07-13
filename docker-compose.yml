@@ -6,12 +6,12 @@ services:
     - --host
     - 0.0.0.0
     - --port
-    - '8080'
+    - '8082'
     - --scheme
     - http
-    image: semitechnologies/weaviate:1.19.7
+    image: semitechnologies/weaviate:1.20.1
     ports:
-    - 8080:8080
+    - 8082:8082
     restart: on-failure:0
     environment:
       OPENAI_APIKEY: $OPENAI_APIKEY
