@@ -1,4 +1,6 @@
 import pytest
+
+import utils
 import wkb
 
 
@@ -15,11 +17,11 @@ import wkb
 def test_chunker(length, expected_output):
     test_str = "s " * length
     # TODO - add " s " to test case once regex splitting added for multiple whitespaces
-    assert len(wkb.chunk_text(test_str)) == expected_output
+    assert len(utils.chunk_text(test_str)) == expected_output
 
 
 def test_load_txt_file():
-    loaded_text = wkb.load_txt_file()
+    loaded_text = utils.load_txt_file()
     assert type(loaded_text) == str
     assert "kubernetes" in loaded_text
 

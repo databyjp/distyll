@@ -22,7 +22,7 @@ collection = wkb.Collection(client, wkb.WV_CLASS)
 
 This will instantiate, or connect to, the knowledge base collection in Weaviate.
 
-**NOTE: If you want to preserve your data, make sure you connect it to a Weaviate instance with data persistence switched on.**
+**NOTE: Currently, it is configured to persist data in the `dbdata` subdirectory.**
 
 ### Add objects
 

@@ -2,14 +2,16 @@ import weaviate
 from weaviate import Client
 from weaviate.util import generate_uuid5
 from dataclasses import dataclass
-from pathlib import Path
 import openai
 import os
 from typing import Optional
+from utils import (
+    download_audio, get_youtube_title, _summarize_multiple_paragraphs, _get_transcripts_from_audio_file, load_wiki_page,
+    load_data, chunk_text, MAX_CHUNK_WORDS
+)
 
 openai.api_key = os.environ["OPENAI_APIKEY"]
 
-MAX_CHUNK_WORDS = 100  # Max chunk size - in words
 MAX_CONTEXT_LENGTH = 1000
 MAX_N_CHUNKS = 1 + (MAX_CONTEXT_LENGTH // MAX_CHUNK_WORDS)
 WV_CLASS = "Knowledge_chunk"
@@ -32,6 +34,7 @@ WV_SCHEMA = {
 
 @dataclass
 class SourceData:
+    source_title: Optional[str]
     source_path: str
     source_text: str
 
@@ -82,19 +85,6 @@ class Collection:
         resp_data = response["data"]["Get"][self.target_class]
         return resp_data
 
-    def _add_text(self, source_path: str, source_text: str, chunk_number_offset: int = 0):
-        """
-        Add data from text input
-        :param source_path:
-        :param source_text:
-        :return:
-        """
-        src_data = SourceData(
-            source_path=source_path,
-            source_text=source_text,
-        )
-        return self._add_to_weaviate(src_data, chunk_number_offset=chunk_number_offset)
-
     def _add_to_weaviate(
             self, source_data: SourceData, chunk_number_offset: int = 0
     ) -> int:
@@ -107,11 +97,12 @@ class Collection:
         object_data = {
             "source_path": str(source_data.source_path)
         }
+        if source_data.source_title:
+            object_data["source_title"] = source_data.source_title
+
         counter = 0
         with self.client.batch() as batch:
             for i, c in enumerate(chunks):
-                # TODO: Add tag fields for convenient filtering
-                # TODO: Add Title?
                 wv_obj = build_weaviate_object(c, object_data, chunk_number=i+chunk_number_offset)
                 batch.add_data_object(
                     class_name=WV_CLASS,
@@ -121,6 +112,20 @@ class Collection:
                 counter += 1
 
         return counter  # TODO add error handling
+
+    def _add_text(self, source_path: str, source_text: str, chunk_number_offset: int = 0, source_title: Optional[str] = None):
+        """
+        Add data from text input
+        :param source_path:
+        :param source_text:
+        :return:
+        """
+        src_data = SourceData(
+            source_path=source_path,
+            source_text=source_text,
+            source_title=source_title,
+        )
+        return self._add_to_weaviate(src_data, chunk_number_offset=chunk_number_offset)
 
     def add_text_file(
             self, text_file_path: str
@@ -132,7 +137,7 @@ class Collection:
         """
         from pathlib import Path
         filepath = Path(text_file_path)
-        return self._add_text(text_file_path, load_data(filepath))
+        return self._add_text(source_path=text_file_path, source_text=load_data(filepath), source_title=text_file_path)
 
     def add_wiki_article(
             self, wiki_title: str
@@ -142,7 +147,7 @@ class Collection:
         :param wiki_title: Title of the Wiki page to add
         :return:
         """
-        return self._add_text(wiki_title, load_wiki_page(wiki_title))
+        return self._add_text(source_path=wiki_title, source_text=load_wiki_page(wiki_title), source_title=wiki_title)
 
     def add_from_youtube(self, youtube_url: str) -> int:
         outpath = 'temp_audio.mp3'
@@ -151,8 +156,13 @@ class Collection:
 
         obj_count = 0
         for transcript_text in transcript_texts:
-            obj_count += self._add_text(youtube_url, transcript_text, chunk_number_offset=obj_count)
-        os.remove(outpath)
+            obj_count += self._add_text(source_path=youtube_url, source_text=transcript_text,
+                                        chunk_number_offset=obj_count, source_title=get_youtube_title(youtube_url))
+
+        # Cleanup - if original file still exists
+        if os.path.exists(outpath):
+            os.remove(outpath)
+
         return obj_count
 
     def _get_generated_result(self, weaviate_response: dict) -> str:
@@ -244,6 +254,50 @@ class Collection:
             return self._get_generated_result(response)
 
     def summarize_entry(
+            self, source_path: str,
+            custom_prompt: str = None,
+            debug: bool = False
+    ) -> str:
+        """
+        Summarize all objects for a particular entry
+        :param source_path:
+        :param custom_prompt: A custom prompt or instruction for the final summary
+        :param debug:
+        :return:
+        """
+        entry_count = self._get_entry_count(source_path)
+        where_filter = {
+            "path": ["source_path"],
+            "operator": "Equal",
+            "valueText": source_path
+        }
+        property_names = self._get_all_property_names()
+        topic_prompt = f"""
+        Using plain language, summarize the following as a whole into a paragraph or two of text.
+        List the topics it covers, and what the reader might learn by listening to it. 
+        """
+        # TODO: Save summaries of long content to Weaviate so that they can be re-used
+        section_summaries = list()
+        for i in range((entry_count // MAX_N_CHUNKS) + 1):
+            response = (
+                self.client.query.get(WV_CLASS, property_names)
+                .with_where(where_filter)
+                .with_offset((i * MAX_N_CHUNKS))
+                .with_limit(MAX_N_CHUNKS)
+                .with_generate(
+                    grouped_task=topic_prompt
+                )
+                .do()
+            )
+            section_summaries.append(response)
+
+        if debug:
+            return section_summaries
+        else:
+            section_summaries = [self._get_generated_result(s) for s in section_summaries]
+            return _summarize_multiple_paragraphs(section_summaries, custom_prompt)
+
+    def summarize_entries(
             self, source_path: str,
             custom_prompt: str = None,
             debug: bool = False
@@ -385,75 +439,6 @@ def start_db() -> Client:
     return client
 
 
-def load_txt_file(txt_path: Path = None) -> str:
-    """
-    Load a text (.txt) file and return the resulting string
-    :param txt_path: Path of text file
-    :return:
-    """
-    if txt_path is None:
-        txt_path = Path("srcdata/kubernetes_concepts_overview.txt")
-    return txt_path.read_text()
-
-
-def load_wiki_page(wiki_title: str) -> str:
-    """
-    Load contents of a Wiki page
-    :param wiki_title:
-    :return:
-    """
-    import wikipediaapi
-    wiki_en = wikipediaapi.Wikipedia('en')
-    page_py = wiki_en.page(wiki_title)
-    if page_py.exists():
-        return page_py.summary
-    else:
-        print(f"Could not find a page called {wiki_title}.")
-
-
-def load_data(source_path: Path) -> str:
-    """
-    Load various data types
-    :param source_path:
-    :return:
-    """
-    return load_txt_file(source_path)  # TODO - add other media types
-
-
-def chunk_text(str_in: str) -> list:
-    """
-    Chunk longer text
-    :param str_in:
-    :return:
-    """
-    return chunk_text_by_num_words(str_in)
-
-
-def chunk_text_by_num_words(str_in: str, max_chunk_words: int = MAX_CHUNK_WORDS, overlap: float = 0.25) -> list:
-    """
-    Chunk text input into a list of strings
-    :param str_in: Input string to be chunked
-    :param max_chunk_words: Maximum length of chunk, in words
-    :param overlap: Overlap as a percentage of chunk_words
-    :return: return a list of words
-    """
-    sep = " "
-    overlap_words = int(max_chunk_words * overlap)
-
-    str_in = str_in.strip()
-    word_list = str_in.split(sep)
-    chunks_list = list()
-
-    n_chunks = ((len(word_list) - 1 + overlap_words) // max_chunk_words) + 1
-    for i in range(n_chunks):
-        window_words = word_list[
-                       max(max_chunk_words * i - overlap_words, 0):
-                       max_chunk_words * (i + 1)
-                       ]
-        chunks_list.append(sep.join(window_words))
-    return chunks_list
-
-
 def build_weaviate_object(chunk_body: str, object_data: dict, chunk_number: int = None) -> dict:
     """
     Build a Weaviate object after chunking
@@ -471,95 +456,3 @@ def build_weaviate_object(chunk_body: str, object_data: dict, chunk_number: int 
     return wv_object
 
 
-def download_audio(link: str, outpath: str):
-    import yt_dlp
-    with yt_dlp.YoutubeDL({'extract_audio': True, 'format': 'bestaudio', 'outtmpl': outpath}) as video:
-        info_dict = video.extract_info(link, download=True)
-        video_title = info_dict['title']
-        print(f"Found {video_title} - downloading")
-        video.download(link)
-        print(f"Successfully Downloaded to {outpath}")
-
-
-def _summarize_multiple_paragraphs(paragraphs: list, topic_prompt: str = None) -> str:
-    """
-    Helper function for summarizing multiple paragraphs using an LLM
-    :param paragraphs:
-    :return:
-    """
-    if topic_prompt is None:
-        topic_prompt = f"""
-        Hello! Please summarize the following as a whole into two or three paragraphs of text.
-        List the topics it covers, and what the reader might learn by listening to it
-        {("=" * 10)}
-        {paragraphs}
-        """
-    else:
-        topic_prompt = f"""
-        {topic_prompt}
-        {("=" * 10)}
-        {paragraphs}        
-        """
-
-    completion = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system",
-             "content": """
-                You are a helpful assistant who can summarize information very well in 
-                clear, concise language without resorting to domain-specific jargon.
-                """
-             },
-            {"role": "user", "content": topic_prompt}
-        ]
-    )
-    return completion.choices[0].message["content"]
-
-
-def _get_transcripts_from_audio_file(audio_file_path: str) -> list:
-    """
-    Get transcripts of audio files using
-    :param audio_file_path:
-    :return:
-    """
-
-    clip_outpaths = _split_audio_files(audio_file_path)
-    transcript_texts = list()
-    print(f"Getting transcripts from {len(clip_outpaths)} audio files...")
-    for i, clip_outpath in enumerate(clip_outpaths):
-        print(f"Processing transcript {i+1} of {len(clip_outpaths)}...")
-        audio_file = open(clip_outpath, "rb")
-        transcript = openai.Audio.transcribe("whisper-1", audio_file)
-        transcript_texts.append(transcript["text"])
-    return transcript_texts
-
-
-def _split_audio_files(audio_file_path: str) -> list:
-    """
-    Split long audio files
-    (e.g. so that they fit within the allowed size for Whisper)
-    :param audio_file_path:
-    :return: A list of file paths
-    """
-    from pydub import AudioSegment
-
-    audio = AudioSegment.from_file(audio_file_path)
-
-    # Split long audio into 15-minute clips
-    segment_len = 900
-    clip_outpaths = list()
-
-    if audio.duration_seconds > segment_len:
-        n_segments = 1 + int(audio.duration_seconds) // segment_len
-        print(f"Splitting audio to {n_segments}")
-        for i in range(n_segments):
-            start = max(0, (i * segment_len) - 10) * 1000
-            end = ((i + 1) * segment_len) * 1000
-            clip = audio[start:end]
-            clip_outpath = f"{i}_" + audio_file_path
-            clip.export(f"{i}_" + audio_file_path)
-            clip_outpaths.append(clip_outpath)
-        return clip_outpaths
-    else:
-        print(f"Audio file under {segment_len} seconds. No split required.")
-        return [audio_file_path]
