@@ -13,6 +13,8 @@ services:
     ports:
     - 8082:8082
     restart: on-failure:0
+    volumes:
+      - ./dbdata:/var/lib/weaviate
     environment:
       OPENAI_APIKEY: $OPENAI_APIKEY
       QUERY_DEFAULTS_LIMIT: 25
