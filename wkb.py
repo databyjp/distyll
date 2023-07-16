@@ -39,11 +39,52 @@ class SourceData:
     source_text: str
 
 
+def _extract_get_results(res, target_class):
+    return res["data"]["Get"][target_class]
+
+
 class Collection:
 
     def __init__(self, client: Client, target_class: str):
         self.client = client
         self.target_class = target_class
+
+    def get_total_obj_count(self) -> Union[int, str]:
+        res = self.client.query.aggregate(self.target_class).with_meta_count().do()
+        return res["data"]["Aggregate"][self.target_class][0]["meta"]["count"]
+
+    def get_sample_objs(self, max_objs: int = 3) -> List:
+        response = (
+            self.client.query
+            .get(WV_CLASS, self._get_all_property_names())
+            .with_limit(max_objs)
+            .do()
+        )
+        return _extract_get_results(response, self.target_class)
+
+    def get_all_objs_by_path(
+            self,
+            source_path: str,
+    ) -> List:
+        """
+        Get a grouped set of results and *something*
+        :param source_path:
+        :return:
+        """
+        response = (
+            self.client.query.get(self.target_class, self._get_all_property_names())
+            .with_where(
+                {
+                    "path": ["source_path"],
+                    "operator": "Equal",
+                    "valueText": source_path
+                }
+            )
+            .with_sort({"path": [CHUNK_NO_COL], "order": "asc"})
+            .do()
+        )
+
+        return _extract_get_results(response, self.target_class)
 
     def _get_all_property_names(self) -> List[str]:
         """
@@ -54,8 +95,8 @@ class Collection:
         return [p["name"] for p in class_schema["properties"]]
 
     def _get_entry_count(self, source_path: str) -> int:
-        res = (
-            self.client.query.aggregate(WV_CLASS)
+        response = (
+            self.client.query.aggregate(self.target_class)
             .with_where({
                 "path": "source_path",
                 "operator": "Equal",
@@ -64,7 +105,7 @@ class Collection:
             .with_meta_count()
             .do()
         )
-        return res["data"]["Aggregate"][WV_CLASS][0]["meta"]["count"]
+        return response["data"]["Aggregate"][self.target_class][0]["meta"]["count"]
 
     def text_search(self, neartext_query: str, limit: int = 10) -> list:
         """
@@ -105,7 +146,7 @@ class Collection:
             for i, c in enumerate(chunks):
                 wv_obj = build_weaviate_object(c, object_data, chunk_number=i+chunk_number_offset)
                 batch.add_data_object(
-                    class_name=WV_CLASS,
+                    class_name=self.target_class,
                     data_object=wv_obj,
                     uuid=generate_uuid5(wv_obj)
                 )
@@ -280,7 +321,7 @@ class Collection:
         section_summaries = list()
         for i in range((entry_count // MAX_N_CHUNKS) + 1):
             response = (
-                self.client.query.get(WV_CLASS, property_names)
+                self.client.query.get(self.target_class, property_names)
                 .with_where(where_filter)
                 .with_offset((i * MAX_N_CHUNKS))
                 .with_limit(MAX_N_CHUNKS)
@@ -301,7 +342,7 @@ class Collection:
             self, source_path: str,
             custom_prompt: str = None,
             debug: bool = False
-    ) -> str:
+    ) -> Union[List, str]:
         """
         Summarize all objects for a particular entry
         :param source_path:
@@ -324,7 +365,7 @@ class Collection:
         section_summaries = list()
         for i in range((entry_count // MAX_N_CHUNKS) + 1):
             response = (
-                self.client.query.get(WV_CLASS, property_names)
+                self.client.query.get(self.target_class, property_names)
                 .with_where(where_filter)
                 .with_offset((i * MAX_N_CHUNKS))
                 .with_limit(MAX_N_CHUNKS)
