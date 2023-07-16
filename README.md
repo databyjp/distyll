@@ -39,7 +39,8 @@ They will be added like:
 ```json
 {
   "source_path": source_path,  // e.g. YouTube URL or Wiki title
-  "source_text": text,  // Text body (chunk)
+  "source_text": text,  // Text body (chunk),
+  "source_title": title_text, // Title - where applicable,
   "chunk_number": xx  // Chunk number if chunked from longer text
 }
 ```

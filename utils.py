@@ -2,6 +2,7 @@ import os
 import openai
 import yt_dlp
 from pathlib import Path
+from typing import List
 
 MAX_CHUNK_WORDS = 100  # Max chunk size - in words
 
@@ -21,7 +22,7 @@ def get_youtube_title(link: str):
         return info_dict.get('title', None)
 
 
-def _summarize_multiple_paragraphs(paragraphs: list, topic_prompt: str = None) -> str:
+def _summarize_multiple_paragraphs(paragraphs: List, topic_prompt: str = None) -> str:
     """
     Helper function for summarizing multiple paragraphs using an LLM
     :param paragraphs:
@@ -56,7 +57,7 @@ def _summarize_multiple_paragraphs(paragraphs: list, topic_prompt: str = None) -
     return completion.choices[0].message["content"]
 
 
-def _get_transcripts_from_audio_file(audio_file_path: str) -> list:
+def _get_transcripts_from_audio_file(audio_file_path: str) -> List:
     """
     Get transcripts of audio files using
     :param audio_file_path:
@@ -79,7 +80,7 @@ def _get_transcripts_from_audio_file(audio_file_path: str) -> list:
     return transcript_texts
 
 
-def _split_audio_files(audio_file_path: str) -> list:
+def _split_audio_files(audio_file_path: str) -> List:
     """
     Split long audio files
     (e.g. so that they fit within the allowed size for Whisper)
@@ -145,7 +146,7 @@ def load_data(source_path: Path) -> str:
     return load_txt_file(source_path)  # TODO - add other media types
 
 
-def chunk_text(str_in: str) -> list:
+def chunk_text(str_in: str) -> List:
     """
     Chunk longer text
     :param str_in:
@@ -154,7 +155,7 @@ def chunk_text(str_in: str) -> list:
     return chunk_text_by_num_words(str_in)
 
 
-def chunk_text_by_num_words(str_in: str, max_chunk_words: int = MAX_CHUNK_WORDS, overlap: float = 0.25) -> list:
+def chunk_text_by_num_words(str_in: str, max_chunk_words: int = MAX_CHUNK_WORDS, overlap: float = 0.25) -> List:
     """
     Chunk text input into a list of strings
     :param str_in: Input string to be chunked

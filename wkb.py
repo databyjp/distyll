@@ -4,7 +4,7 @@ from weaviate.util import generate_uuid5
 from dataclasses import dataclass
 import openai
 import os
-from typing import Optional
+from typing import Optional, Union, List
 from utils import (
     download_audio, get_youtube_title, _summarize_multiple_paragraphs, _get_transcripts_from_audio_file, load_wiki_page,
     load_data, chunk_text, MAX_CHUNK_WORDS
@@ -45,7 +45,7 @@ class Collection:
         self.client = client
         self.target_class = target_class
 
-    def _get_all_property_names(self) -> list[str]:
+    def _get_all_property_names(self) -> List[str]:
         """
         Get property names from a Weaviate class
         :return:
@@ -257,7 +257,7 @@ class Collection:
             self, source_path: str,
             custom_prompt: str = None,
             debug: bool = False
-    ) -> str:
+    ) -> Union[str, List]:
         """
         Summarize all objects for a particular entry
         :param source_path:
