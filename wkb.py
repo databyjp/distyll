@@ -4,7 +4,7 @@ from weaviate.util import generate_uuid5
 from dataclasses import dataclass
 import openai
 import os
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Dict
 from utils import (
     download_audio, get_youtube_title, _summarize_multiple_paragraphs, _get_transcripts_from_audio_file, load_wiki_page,
     load_data, chunk_text, MAX_CHUNK_WORDS
@@ -40,6 +40,12 @@ class SourceData:
 
 
 def _extract_get_results(res, target_class):
+    """
+    Extract results from returned GET GraphQL call from Weaviate
+    :param res:
+    :param target_class:
+    :return:
+    """
     return res["data"]["Get"][target_class]
 
 
@@ -54,6 +60,12 @@ class Collection:
         return res["data"]["Aggregate"][self.target_class][0]["meta"]["count"]
 
     def get_sample_objs(self, max_objs: int = 3) -> List:
+        """
+        Get some objects from our collection
+        TODO - randomise sample
+        :param max_objs:
+        :return:
+        """
         response = (
             self.client.query
             .get(WV_CLASS, self._get_all_property_names())
@@ -95,6 +107,11 @@ class Collection:
         return [p["name"] for p in class_schema["properties"]]
 
     def _get_entry_count(self, source_path: str) -> int:
+        """
+        Get the number of objects available in a source path
+        :param source_path:
+        :return:
+        """
         response = (
             self.client.query.aggregate(self.target_class)
             .with_where({
@@ -126,6 +143,26 @@ class Collection:
         resp_data = response["data"]["Get"][self.target_class]
         return resp_data
 
+    def _import_chunks_via_batch(self, chunks: List[str], base_object_data: Dict, chunk_number_offset: int):
+        """
+        Import text chunks via batch import process
+        :param chunks:
+        :param base_object_data:
+        :param chunk_number_offset:
+        :return:
+        """
+        counter = 0
+        with self.client.batch() as batch:
+            for i, c in enumerate(chunks):
+                wv_obj = build_weaviate_object(c, base_object_data, chunk_number=i+chunk_number_offset)
+                batch.add_data_object(
+                    class_name=self.target_class,
+                    data_object=wv_obj,
+                    uuid=generate_uuid5(wv_obj)
+                )
+                counter += 1
+        return counter
+
     def _add_to_weaviate(
             self, source_data: SourceData, chunk_number_offset: int = 0
     ) -> int:
@@ -135,22 +172,13 @@ class Collection:
         :return:
         """
         chunks = chunk_text(source_data.source_text)
-        object_data = {
-            "source_path": str(source_data.source_path)
-        }
-        if source_data.source_title:
-            object_data["source_title"] = source_data.source_title
 
-        counter = 0
-        with self.client.batch() as batch:
-            for i, c in enumerate(chunks):
-                wv_obj = build_weaviate_object(c, object_data, chunk_number=i+chunk_number_offset)
-                batch.add_data_object(
-                    class_name=self.target_class,
-                    data_object=wv_obj,
-                    uuid=generate_uuid5(wv_obj)
-                )
-                counter += 1
+        object_data = {
+            "source_path": str(source_data.source_path),
+            "source_title": getattr(source_data, "source_title", None)
+        }
+
+        counter = self._import_chunks_via_batch(chunks, object_data, chunk_number_offset)
 
         return counter  # TODO add error handling
 
