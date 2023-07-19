@@ -55,49 +55,6 @@ class Collection:
         self.client = client
         self.target_class = target_class
 
-    def get_total_obj_count(self) -> Union[int, str]:
-        res = self.client.query.aggregate(self.target_class).with_meta_count().do()
-        return res["data"]["Aggregate"][self.target_class][0]["meta"]["count"]
-
-    def get_sample_objs(self, max_objs: int = 3) -> List:
-        """
-        Get some objects from our collection
-        TODO - randomise sample
-        :param max_objs:
-        :return:
-        """
-        response = (
-            self.client.query
-            .get(WV_CLASS, self._get_all_property_names())
-            .with_limit(max_objs)
-            .do()
-        )
-        return _extract_get_results(response, self.target_class)
-
-    def get_all_objs_by_path(
-            self,
-            source_path: str,
-    ) -> List:
-        """
-        Get a grouped set of results and *something*
-        :param source_path:
-        :return:
-        """
-        response = (
-            self.client.query.get(self.target_class, self._get_all_property_names())
-            .with_where(
-                {
-                    "path": ["source_path"],
-                    "operator": "Equal",
-                    "valueText": source_path
-                }
-            )
-            .with_sort({"path": [CHUNK_NO_COL], "order": "asc"})
-            .do()
-        )
-
-        return _extract_get_results(response, self.target_class)
-
     def _get_all_property_names(self) -> List[str]:
         """
         Get property names from a Weaviate class
@@ -219,18 +176,25 @@ class Collection:
         return self._add_text(source_path=wiki_title, source_text=load_wiki_page(wiki_title), source_title=wiki_title)
 
     def add_from_youtube(self, youtube_url: str) -> int:
-        outpath = 'temp_audio.mp3'
-        download_audio(youtube_url, outpath)
-        transcript_texts = _get_transcripts_from_audio_file(outpath)
+        """
+        Add the transcript of a YouTube video to Weaviate
+        :param youtube_url:
+        :return:
+        """
+        # Grab the YouTube Video & convert to transcript text
+        tmp_outpath = 'temp_audio.mp3'
+        download_audio(youtube_url, tmp_outpath)
+        transcript_texts = _get_transcripts_from_audio_file(tmp_outpath)
 
+        # Ingest transcripts into the database
         obj_count = 0
         for transcript_text in transcript_texts:
             obj_count += self._add_text(source_path=youtube_url, source_text=transcript_text,
                                         chunk_number_offset=obj_count, source_title=get_youtube_title(youtube_url))
 
         # Cleanup - if original file still exists
-        if os.path.exists(outpath):
-            os.remove(outpath)
+        if os.path.exists(tmp_outpath):
+            os.remove(tmp_outpath)
 
         return obj_count
 
@@ -345,50 +309,7 @@ class Collection:
         Using plain language, summarize the following as a whole into a paragraph or two of text.
         List the topics it covers, and what the reader might learn by listening to it. 
         """
-        # TODO: Save summaries of long content to Weaviate so that they can be re-used
-        section_summaries = list()
-        for i in range((entry_count // MAX_N_CHUNKS) + 1):
-            response = (
-                self.client.query.get(self.target_class, property_names)
-                .with_where(where_filter)
-                .with_offset((i * MAX_N_CHUNKS))
-                .with_limit(MAX_N_CHUNKS)
-                .with_generate(
-                    grouped_task=topic_prompt
-                )
-                .do()
-            )
-            section_summaries.append(response)
 
-        if debug:
-            return section_summaries
-        else:
-            section_summaries = [self._get_generated_result(s) for s in section_summaries]
-            return _summarize_multiple_paragraphs(section_summaries, custom_prompt)
-
-    def summarize_entries(
-            self, source_path: str,
-            custom_prompt: str = None,
-            debug: bool = False
-    ) -> Union[List, str]:
-        """
-        Summarize all objects for a particular entry
-        :param source_path:
-        :param custom_prompt: A custom prompt or instruction for the final summary
-        :param debug:
-        :return:
-        """
-        entry_count = self._get_entry_count(source_path)
-        where_filter = {
-            "path": ["source_path"],
-            "operator": "Equal",
-            "valueText": source_path
-        }
-        property_names = self._get_all_property_names()
-        topic_prompt = f"""
-        Using plain language, summarize the following as a whole into a paragraph or two of text.
-        List the topics it covers, and what the reader might learn by listening to it. 
-        """
         # TODO: Save summaries of long content to Weaviate so that they can be re-used
         section_summaries = list()
         for i in range((entry_count // MAX_N_CHUNKS) + 1):
@@ -443,36 +364,6 @@ class Collection:
         else:
             return self._generative_with_object(source_path=source_path, query_str=question, topic_prompt=topic_prompt)
 
-    def suggest_topics_to_learn(
-            self, query_str: str,
-            obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
-            debug: bool = False
-    ) -> str:
-        """
-        Given a topic, suggest sub-topics to learn based on contents of the DB
-        :param query_str:
-        :param obj_limit:
-        :param max_distance:
-        :param debug:
-        :return:
-        """
-        topic_prompt = f"""
-        If the following text does includes information about {query_str}, 
-        extract a list of three to six related sub-topics
-        related to {query_str} that the user might learn about.
-        Deliver the topics as a short list, each separated by two consecutive newlines like `\n\n`
-
-        If the following information does not includes information about {query_str}, 
-        tell the user that not enough information could not be found.
-        """
-
-        return self._generative_with_query(
-            query_str,
-            topic_prompt,
-            obj_limit=obj_limit, max_distance=max_distance,
-            debug=debug
-        )
-
 
 def instantiate_weaviate() -> Client:
     """
@@ -520,6 +411,7 @@ def build_weaviate_object(chunk_body: str, object_data: dict, chunk_number: int 
     for k, v in object_data.items():
         wv_object[k] = v
     wv_object[DB_BODY_PROPERTY] = chunk_body
+
     if chunk_number is not None:
         wv_object[CHUNK_NO_COL] = chunk_number
     return wv_object
