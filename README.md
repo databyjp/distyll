@@ -1,6 +1,6 @@
 ## Personal knowledge base app
 
-- Powered by Weaviate
+- Powered by [Weaviate](https://www.weaviate.io)
 - Unofficial personal project - for educational purposes only 
 
 ### Motivation
@@ -13,6 +13,8 @@ I wrote this to help me consume content & learn. The idea being that I could:
     - having it suggest follow-up topic / sub-topics
 
 ## How to use
+
+**See demo_notebook.ipynb for a quick demo of what you can do with it.**
 
 You'll need an OpenAI api key
 
@@ -73,3 +75,7 @@ collection.ask_object(youtube_url, "What is Weaviate?")  # Ask this particular s
 collection.text_search("kubernetes", 2)  # Vector search
 collection.summarize_topic("kubernetes")  # Vector search & summarize results
 ```
+
+### Why doesn't this have a front end?
+
+I'm working on it - it's just a demo project - please bear with me. 😅
