@@ -129,14 +129,16 @@ def load_txt_file(txt_path: Path = None) -> str:
     return txt_path.read_text()
 
 
-def load_wiki_page(wiki_title: str) -> str:
+def load_wiki_page(wiki_title: str, user_agent: str = 'YourProjectName (yournamehere@gmail.com)') -> str:
     """
     Load contents of a Wiki page
     :param wiki_title:
+    :param user_agent:
     :return:
     """
     import wikipediaapi
-    wiki_en = wikipediaapi.Wikipedia('en')
+    wiki_en = wikipediaapi.Wikipedia(user_agent, 'en')
+
     page_py = wiki_en.page(wiki_title)
     if page_py.exists():
         return page_py.text  # Could also return page_py.summary

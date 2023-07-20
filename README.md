@@ -1,16 +1,30 @@
 ## Personal knowledge base app
 
-### Goals
+- Powered by Weaviate
+- Unofficial personal project - for educational purposes only 
 
-Help me learn about stuff with a workflow of:
-- Dump information into this database
-- Help me digest it by summarizing
+### Motivation
+
+I wrote this to help me consume content & learn. The idea being that I could:
+- Dump information into this knowledge base, and
+- Help me digest it by:
+    - getting summaries
+    - asking it questions
+    - having it suggest follow-up topic / sub-topics
 
 ## How to use
 
-You'll need an Open AI api key, and a Weaviate cluster
+You'll need an OpenAI api key
 
 ### Connect
+
+#### Default configuration
+
+The app is set up to use `Embedded Weaviate` with `openai` modules, and save all data to one collection (`Knowledge_chunk` class). To modify these, review/modify:
+
+`instantiate_weaviate()`, `WV_CLASS` and `BASE_CLASS_OBJ` respectively.
+
+#### How
 
 Spin up the Weaviate cluster, and run this :
 
@@ -22,7 +36,7 @@ collection = wkb.Collection(client, wkb.WV_CLASS)
 
 This will instantiate, or connect to, the knowledge base collection in Weaviate.
 
-**NOTE: Currently, it is configured to persist data in the `dbdata` subdirectory.**
+**NOTE: Currently, it is configured to persist data in the default location for Embedded Weaviate.**
 
 ### Add objects
 
@@ -52,8 +66,8 @@ You can use the data like so:
 ```python
 # Source-specific
 collection.generate_summary(youtube_url)  # Summarize the entry
-collection.generate_summary(youtube_url, "Summarize into a tweet")  # Summarize the entry, using this specific instruction
-collection.ask_object(youtube_url, "What is HNSW-FINGER?")  # Ask this particular source 
+collection.generate_summary(youtube_url, "Summarize this into a tweet")  # Summarize the entry, using this specific instruction
+collection.ask_object(youtube_url, "What is Weaviate?")  # Ask this particular source 
 
 # Knowledge-base wide actions
 collection.text_search("kubernetes", 2)  # Vector search

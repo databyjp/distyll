@@ -22,7 +22,7 @@ BASE_CLASS_OBJ = {
     "class": WV_CLASS,
     "vectorizer": "text2vec-openai",
     "moduleConfig": {
-        "generate-openai": {}
+        "generative-openai": {}
     },
 }
 WV_SCHEMA = {
@@ -51,9 +51,22 @@ def _extract_get_results(res, target_class):
 
 class Collection:
 
-    def __init__(self, client: Client, target_class: str):
+    def __init__(self, client: Client, target_class: str, user_agent: str = ""):
         self.client = client
         self.target_class = target_class
+
+        if user_agent == "":
+            print("Warning - please set a user agent. Otherwise, the Wikipedia functionalities may not work.")
+        else:
+            self.user_agent = user_agent
+
+    def set_apikey(self, openai_key: Optional[str] = None, cohere_key: Optional[str] = None):
+
+        if openai_key:
+            self.client._connection._headers["x-openai-api-key"] = openai_key
+
+        if cohere_key:
+            self.client._connection._headers["x-cohere-api-key"] = cohere_key
 
     def reinitialize_db(self):
         self.client.schema.delete_class(self.target_class)
@@ -221,7 +234,7 @@ class Collection:
         :param wiki_title: Title of the Wiki page to add
         :return:
         """
-        return self._add_text(source_path=wiki_title, source_text=load_wiki_page(wiki_title), source_title=wiki_title)
+        return self._add_text(source_path=wiki_title, source_text=load_wiki_page(wiki_title, self.user_agent), source_title=wiki_title)
 
     def add_from_youtube(self, youtube_url: str) -> int:
         """
@@ -443,15 +456,6 @@ class Collection:
         )
 
 
-def instantiate_weaviate() -> Client:
-    """
-    Instantiate Weaviate
-    :return:
-    """
-    client = weaviate.Client("http://localhost:8082")
-    return client
-
-
 def add_default_class(client: Client) -> bool:
     """
     Add the default class to be used with this knowledge base DB
@@ -467,12 +471,28 @@ def add_default_class(client: Client) -> bool:
         return True
 
 
-def start_db() -> Client:
+def instantiate_weaviate(version: str = "latest") -> Client:
+    """
+    :param version: Weaviate version to use
+    Instantiate Weaviate
+    :return:
+    """
+    from weaviate import EmbeddedOptions
+
+    # Replace this with other client instantiation method to connect to another instance of Weaviate
+    client = weaviate.Client(
+        embedded_options=EmbeddedOptions(version=version),
+    )
+
+    return client
+
+
+def start_db(version: str = "latest") -> Client:
     """
     Instantiate this knowledge database & return the client object
     :return:
     """
-    client = instantiate_weaviate()
+    client = instantiate_weaviate(version)
     add_default_class(client)
     return client
 
