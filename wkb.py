@@ -22,7 +22,7 @@ BASE_CLASS_OBJ = {
     "class": WV_CLASS,
     "vectorizer": "text2vec-openai",
     "moduleConfig": {
-        "generate-openai": []
+        "generate-openai": {}
     },
 }
 WV_SCHEMA = {
