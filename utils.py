@@ -8,7 +8,13 @@ MAX_CHUNK_WORDS = 100  # Max chunk size - in words
 
 
 def download_audio(link: str, outpath: str):
-    with yt_dlp.YoutubeDL({'extract_audio': True, 'format': 'bestaudio', 'outtmpl': outpath}) as video:
+    with yt_dlp.YoutubeDL({
+        'extract_audio': True, 'format': 'bestaudio', 'outtmpl': outpath, 'quiet': True, 'cachedir': False
+    }) as video:
+
+        if os.path.exists(outpath):
+            os.remove(outpath)
+
         info_dict = video.extract_info(link, download=True)
         video_title = info_dict['title']
         print(f"Found {video_title} - downloading")
@@ -17,7 +23,7 @@ def download_audio(link: str, outpath: str):
 
 
 def get_youtube_title(link: str):
-    with yt_dlp.YoutubeDL() as ydl:
+    with yt_dlp.YoutubeDL({'quiet': True, 'cachedir': False}) as ydl:
         info_dict = ydl.extract_info(link, download=False)
         return info_dict.get('title', None)
 
@@ -69,9 +75,9 @@ def _get_transcripts_from_audio_file(audio_file_path: str) -> List:
     print(f"Getting transcripts from {len(clip_outpaths)} audio files...")
     for i, clip_outpath in enumerate(clip_outpaths):
         print(f"Processing transcript {i+1} of {len(clip_outpaths)}...")
-        audio_file = open(clip_outpath, "rb")
-        transcript = openai.Audio.transcribe("whisper-1", audio_file)
-        transcript_texts.append(transcript["text"])
+        with open(clip_outpath, "rb") as audio_file:
+            transcript = openai.Audio.transcribe("whisper-1", audio_file)
+            transcript_texts.append(transcript["text"])
 
     # Clean up
     for clip_outpath in clip_outpaths:
@@ -103,7 +109,8 @@ def _split_audio_files(audio_file_path: str) -> List:
             end = ((i + 1) * segment_len) * 1000
             clip = audio[start:end]
             clip_outpath = f"{i}_" + audio_file_path
-            clip.export(f"{i}_" + audio_file_path)
+            outfile = clip.export(f"{i}_" + audio_file_path)
+            outfile.close()
             clip_outpaths.append(clip_outpath)
         return clip_outpaths
     else:
@@ -132,7 +139,7 @@ def load_wiki_page(wiki_title: str) -> str:
     wiki_en = wikipediaapi.Wikipedia('en')
     page_py = wiki_en.page(wiki_title)
     if page_py.exists():
-        return page_py.summary
+        return page_py.text  # Could also return page_py.summary
     else:
         print(f"Could not find a page called {wiki_title}.")
 

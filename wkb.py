@@ -55,6 +55,53 @@ class Collection:
         self.client = client
         self.target_class = target_class
 
+    def reinitialize_db(self):
+        self.client.schema.delete_class(self.target_class)
+        add_default_class(self.client)
+
+    def get_total_obj_count(self) -> Union[int, str]:
+        res = self.client.query.aggregate(self.target_class).with_meta_count().do()
+        return res["data"]["Aggregate"][self.target_class][0]["meta"]["count"]
+
+    def get_sample_objs(self, max_objs: int = 3) -> List:
+        """
+        Get some objects from our collection
+        TODO - randomise sample
+        :param max_objs:
+        :return:
+        """
+        response = (
+            self.client.query
+            .get(WV_CLASS, self._get_all_property_names())
+            .with_limit(max_objs)
+            .do()
+        )
+        return _extract_get_results(response, self.target_class)
+
+    def get_all_objs_by_path(
+            self,
+            source_path: str,
+    ) -> List:
+        """
+        Get a grouped set of results and *something*
+        :param source_path:
+        :return:
+        """
+        response = (
+            self.client.query.get(self.target_class, self._get_all_property_names())
+            .with_where(
+                {
+                    "path": ["source_path"],
+                    "operator": "Equal",
+                    "valueText": source_path
+                }
+            )
+            .with_sort({"path": [CHUNK_NO_COL], "order": "asc"})
+            .do()
+        )
+
+        return _extract_get_results(response, self.target_class)
+
     def _get_all_property_names(self) -> List[str]:
         """
         Get property names from a Weaviate class
@@ -151,6 +198,7 @@ class Collection:
             source_text=source_text,
             source_title=source_title,
         )
+        print(f"Adding the data from {source_path}")
         return self._add_to_weaviate(src_data, chunk_number_offset=chunk_number_offset)
 
     def add_text_file(
@@ -346,7 +394,7 @@ class Collection:
         :return:
         """
         topic_prompt = f"""
-        Based on the following text, summarize any information relating to {query_str}.
+        Based on the following text, summarize any information relating to {query_str} concisely.
         If the text does not contain required information, 
         do not answer the question, and indicate as such to the user.
         """
@@ -363,6 +411,36 @@ class Collection:
             return self._generative_with_object(source_path=source_path, query_str=question, topic_prompt=question)
         else:
             return self._generative_with_object(source_path=source_path, query_str=question, topic_prompt=topic_prompt)
+
+    def suggest_topics_to_learn(
+            self, query_str: str,
+            obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
+            debug: bool = False
+    ) -> str:
+        """
+        Given a topic, suggest sub-topics to learn based on contents of the DB
+        :param query_str:
+        :param obj_limit:
+        :param max_distance:
+        :param debug:
+        :return:
+        """
+        topic_prompt = f"""
+        If the following text does includes information about {query_str}, 
+        extract a list of three to six related sub-topics
+        related to {query_str} that the user might learn about.
+        Deliver the topics as a short list, each separated by two consecutive newlines like `\n\n`
+
+        If the following information does not includes information about {query_str}, 
+        tell the user that not enough information could not be found.
+        """
+
+        return self._generative_with_query(
+            query_str,
+            topic_prompt,
+            obj_limit=obj_limit, max_distance=max_distance,
+            debug=debug
+        )
 
 
 def instantiate_weaviate() -> Client:
