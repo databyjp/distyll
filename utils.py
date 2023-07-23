@@ -1,10 +1,67 @@
 import os
 import openai
 import yt_dlp
+import requests
 from pathlib import Path
+from pypdf import PdfReader
 from typing import List
 
 MAX_CHUNK_WORDS = 100  # Max chunk size - in words
+
+
+def _download_file(url, out_filepath) -> str:
+    """
+    Download a file from a given url and save it locally.
+    :param url: URL of the file to download
+    :param out_filepath: Path of the file to save to
+    :return:
+    """
+    response = requests.get(url)
+
+    # Raise an HTTPError if the response was unsuccessful.
+    response.raise_for_status()
+
+    with open(out_filepath, 'wb') as file:
+        file.write(response.content)
+    return out_filepath
+
+
+def get_local_pdf_text(pdf_path: str) -> str:
+    # Load the PDF file
+    reader = PdfReader(pdf_path)
+
+    text = ""
+    for page in reader.pages:
+        text += "\n" + page.extract_text()
+
+    return text
+
+
+def get_online_pdf_text(pdf_url: str) -> str:
+    """
+
+    :param pdf_url:
+    :return:
+    """
+
+
+    pdf_outpath = "srcdata/temp.pdf"
+
+    # Use the function to download the PDF - e.g. "https://arxiv.org/pdf/1706.03762.pdf"
+    _download_file(pdf_url, pdf_outpath)
+
+    # Load the PDF file
+    reader = PdfReader(pdf_outpath)
+
+    # Cleanup (delete PDF file)
+    if os.path.exists(pdf_outpath):
+        os.remove(pdf_outpath)
+
+    text = ""
+    for page in reader.pages:
+        text += "\n" + page.extract_text()
+
+    return text
 
 
 def download_audio(link: str, outpath: str):
@@ -20,6 +77,18 @@ def download_audio(link: str, outpath: str):
         print(f"Found {video_title} - downloading")
         video.download(link)
         print(f"Successfully Downloaded to {outpath}")
+
+
+def get_youtube_transcripts(youtube_url: str) -> List[str]:
+    # Grab the YouTube Video & convert to transcript text
+    tmp_outpath = 'temp_audio.mp3'
+    download_audio(youtube_url, tmp_outpath)
+    transcript_texts = _get_transcripts_from_audio_file(tmp_outpath)
+
+    # Cleanup - if original file still exists
+    if os.path.exists(tmp_outpath):
+        os.remove(tmp_outpath)
+    return transcript_texts
 
 
 def get_youtube_title(link: str):

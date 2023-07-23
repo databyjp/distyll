@@ -6,7 +6,7 @@ import openai
 import os
 from typing import Optional, Union, List, Dict
 from utils import (
-    download_audio, get_youtube_title, _summarize_multiple_paragraphs, _get_transcripts_from_audio_file, load_wiki_page,
+    get_local_pdf_text, get_online_pdf_text, get_youtube_transcripts, get_youtube_title, _summarize_multiple_paragraphs, _get_transcripts_from_audio_file, load_wiki_page,
     load_data, chunk_text, MAX_CHUNK_WORDS
 )
 
@@ -234,7 +234,8 @@ class Collection:
         :param wiki_title: Title of the Wiki page to add
         :return:
         """
-        return self._add_text(source_path=wiki_title, source_text=load_wiki_page(wiki_title, self.user_agent), source_title=wiki_title)
+        return self._add_text(source_path=wiki_title, source_text=load_wiki_page(wiki_title, self.user_agent),
+                              source_title=wiki_title)
 
     def add_from_youtube(self, youtube_url: str) -> int:
         """
@@ -242,20 +243,44 @@ class Collection:
         :param youtube_url:
         :return:
         """
-        # Grab the YouTube Video & convert to transcript text
-        tmp_outpath = 'temp_audio.mp3'
-        download_audio(youtube_url, tmp_outpath)
-        transcript_texts = _get_transcripts_from_audio_file(tmp_outpath)
+        # Get the transcripts from a YouTube video
+        transcript_texts_list = get_youtube_transcripts(youtube_url)
 
-        # Ingest transcripts into the database
+        # Ingest texts into the database
         obj_count = 0
-        for transcript_text in transcript_texts:
+        for transcript_text in transcript_texts_list:
             obj_count += self._add_text(source_path=youtube_url, source_text=transcript_text,
                                         chunk_number_offset=obj_count, source_title=get_youtube_title(youtube_url))
 
-        # Cleanup - if original file still exists
-        if os.path.exists(tmp_outpath):
-            os.remove(tmp_outpath)
+        return obj_count
+
+    def add_from_pdf_local(self, pdf_path):
+        """
+        Add from a PDF file
+        :param pdf_path:
+        :return:
+        """
+        # Get text from the PDF file
+        pdf_text = get_local_pdf_text(pdf_path)
+
+        # Ingest text into the database
+        obj_count = self._add_text(source_path=pdf_path, source_text=pdf_text,
+                                   source_title=pdf_path)
+
+        return obj_count
+
+    def add_from_pdf_online(self, pdf_url):
+        """
+        Add from a PDF file
+        :param pdf_url:
+        :return:
+        """
+        # Get text from the PDF file
+        pdf_text = get_online_pdf_text(pdf_url)
+
+        # Ingest text into the database
+        obj_count = self._add_text(source_path=pdf_url, source_text=pdf_text,
+                                   source_title=pdf_url)
 
         return obj_count
 
@@ -359,6 +384,7 @@ class Collection:
         :param debug:
         :return:
         """
+        # TODO - refactor to a recursive solution
         entry_count = self._get_entry_count(source_path)
         where_filter = {
             "path": ["source_path"],
