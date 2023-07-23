@@ -48,6 +48,8 @@ You can add objects from various sources:
 collection.add_text_file(PATH_TO_FILE)  # Add text from a local text file
 collection.add_wiki_article(wiki_title)  # Add Wiki article summary (use Wikipedia article title)
 collection.add_from_youtube(youtube_url)  # Add youtube video transcript (use YouTube URL)
+collection.add_from_pdf_online(pdf_url)  # Add from PDF (using a URL)
+collection.add_from_pdf_local(pdf_path)  # Add from PDF (using a local path)
 ```
 
 They will be added like: 
