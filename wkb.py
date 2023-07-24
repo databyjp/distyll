@@ -487,12 +487,18 @@ def instantiate_weaviate(version: str = "latest") -> Client:
     return client
 
 
-def start_db(version: str = "latest") -> Client:
+def start_db(version: str = "latest", custom_client: Client = None) -> Client:
     """
     Instantiate this knowledge database & return the client object
+    :param version: Version for pulling in specific versions (with Embedded Weaviate instantiation)
+    :param custom_client: Pass on a custom client for use
     :return:
     """
-    client = instantiate_weaviate(version)
+    if not custom_client:
+        client = instantiate_weaviate(version)
+    else:
+        client = custom_client
+
     add_default_class(client)
     return client
 
