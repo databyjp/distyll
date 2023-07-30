@@ -236,6 +236,38 @@ class Collection:
         """
         return self._add_text(source_path=wiki_title, source_text=load_wiki_page(wiki_title, self.user_agent), source_title=wiki_title)
 
+    def add_pdf(self, pdf_url: str) -> int:
+        """
+        Add a PDF
+        :param pdf_url:
+        :return:
+        """
+        from pypdf import PdfReader
+        import requests
+        from io import BytesIO
+
+        def download_and_parse_pdf(url):
+            # Send a GET request to the URL
+            response = requests.get(url)
+
+            # Create a file-like object from the content of the response
+            pdf_file = BytesIO(response.content)
+            pdf_reader = PdfReader(pdf_file)
+
+            # Initialize a string to store the text content
+            pdf_text = ""
+
+            # Iterate through the pages and extract the text
+            for page_num in range(len(pdf_reader.pages)):
+                page = pdf_reader.pages[page_num]
+                pdf_text += page.extract_text()
+
+            return pdf_text
+
+        text_content = download_and_parse_pdf(pdf_url)
+        return self._add_text(source_path=pdf_url, source_text=text_content,
+                              source_title=pdf_url)
+
     def add_from_youtube(self, youtube_url: str) -> int:
         """
         Add the transcript of a YouTube video to Weaviate
