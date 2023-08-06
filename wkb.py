@@ -268,6 +268,39 @@ class Collection:
         return self._add_text(source_path=pdf_url, source_text=text_content,
                               source_title=pdf_url)
 
+    def add_from_movie_local(self, movie_path: str) -> int:
+        """
+        Add the transcript of a video to Weaviate
+        :param movie_path:
+        :return:
+        """
+        # Grab the Video & convert to transcript text
+        from moviepy.editor import VideoFileClip
+        import tempfile
+
+        video = VideoFileClip(movie_path)
+        audio = video.audio
+
+        temp_audio_file = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+
+        # Write audio to the temporary file
+        audio.write_audiofile(temp_audio_file.name)
+
+        print(f"Audio saved to temporary file: {temp_audio_file.name}")
+        transcript_texts = _get_transcripts_from_audio_file(temp_audio_file.name)
+
+        # Ingest transcripts into the database
+        obj_count = 0
+        for transcript_text in transcript_texts:
+            obj_count += self._add_text(source_path=movie_path, source_text=transcript_text,
+                                        chunk_number_offset=obj_count, source_title=movie_path)
+
+        # Cleanup - if original file still exists
+        # Optionally, you can delete the temporary file when you're done
+        temp_audio_file.close()
+
+        return obj_count
+
     def add_from_youtube(self, youtube_url: str) -> int:
         """
         Add the transcript of a YouTube video to Weaviate

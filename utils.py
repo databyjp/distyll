@@ -108,8 +108,8 @@ def _split_audio_files(audio_file_path: str) -> List:
             start = max(0, (i * segment_len) - 10) * 1000
             end = ((i + 1) * segment_len) * 1000
             clip = audio[start:end]
-            clip_outpath = f"{i}_" + audio_file_path
-            outfile = clip.export(f"{i}_" + audio_file_path)
+            clip_outpath = audio_file_path + f"_{i}.mp3"
+            outfile = clip.export(clip_outpath)
             outfile.close()
             clip_outpaths.append(clip_outpath)
         return clip_outpaths
