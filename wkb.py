@@ -15,6 +15,7 @@ openai.api_key = os.environ["OPENAI_APIKEY"]
 MAX_CONTEXT_LENGTH = 1000
 MAX_N_CHUNKS = 1 + (MAX_CONTEXT_LENGTH // MAX_CHUNK_WORDS)
 WV_CLASS = "Knowledge_chunk"
+SUMM_CLASS = "Summary"
 DB_BODY_PROPERTY = "body"
 CHUNK_NO_COL = "chunk_number"
 
@@ -25,18 +26,26 @@ BASE_CLASS_OBJ = {
         "generative-openai": {}
     },
 }
+SUMMARY_CLASS_OBJ = {
+    "class": SUMM_CLASS,
+    "vectorizer": "text2vec-openai",
+    "moduleConfig": {
+        "generative-openai": {}
+    },
+}
 WV_SCHEMA = {
     "classes": [
-        BASE_CLASS_OBJ
+        BASE_CLASS_OBJ,
+        SUMMARY_CLASS_OBJ
     ]
 }
 
 
 @dataclass
 class SourceData:
-    source_title: Optional[str]
     source_path: str
     source_text: str
+    source_title: Optional[str] = None
 
 
 def _extract_get_results(res, target_class):
@@ -141,6 +150,37 @@ class Collection:
         )
         return response["data"]["Aggregate"][self.target_class][0]["meta"]["count"]
 
+    def get_obj_sample(self, source_path):
+        response = (
+            self.client.query.get(self.target_class, ["source_path", "source_title"])
+            .with_where({
+                "path": ["source_path"],
+                "operator": "Equal",
+                "valueText": source_path
+            })
+            .with_limit(1)
+            .do()
+        )
+        return response["data"]["Get"][self.target_class][0]
+
+    def check_if_obj_present(self, identifier: Union[str, SourceData]):
+        if type(identifier) == SourceData:
+            presence_bool = self._get_sourcedata_obj_count(identifier) > 0
+        elif type(identifier) == str:
+            tmp_srcdata = SourceData(
+                source_path=identifier,
+                source_text=identifier,
+            )
+            presence_bool = self._get_sourcedata_obj_count(tmp_srcdata) > 0
+        else:
+            return 0
+
+        if presence_bool:
+            print("Data already present in DB")
+            return True
+        else:
+            return False
+
     def text_search(self, neartext_query: str, limit: int = 10) -> list:
         """
         Wrapper for a nearText search
@@ -180,6 +220,24 @@ class Collection:
                 counter += 1
         return counter
 
+    def _get_sourcedata_obj_count(self, source_data: SourceData) -> bool:
+        try:
+            response = (
+                self.client.query.aggregate(
+                    class_name=WV_CLASS,
+                )
+                .with_where({
+                    "path": ["source_path"],
+                    "operator": "Equal",
+                    "valueText": source_data.source_path
+                })
+                .with_meta_count().do()
+            )
+            count = response["data"]["Aggregate"][WV_CLASS][0]["meta"]["count"]
+            return count
+        except:
+            return 0
+
     def _add_to_weaviate(
             self, source_data: SourceData, chunk_number_offset: int = 0
     ) -> int:
@@ -188,16 +246,19 @@ class Collection:
         :param source_data: DataClass of source data, with "source_path" and "source_text"
         :return:
         """
-        chunks = chunk_text(source_data.source_text)
+        if self.check_if_obj_present(source_data):
+            return 0
+        else:
+            chunks = chunk_text(source_data.source_text)
 
-        object_data = {
-            "source_path": str(source_data.source_path),
-            "source_title": getattr(source_data, "source_title", None)
-        }
+            object_data = {
+                "source_path": str(source_data.source_path),
+                "source_title": getattr(source_data, "source_title", None)
+            }
 
-        counter = self._import_chunks_via_batch(chunks, object_data, chunk_number_offset)
+            counter = self._import_chunks_via_batch(chunks, object_data, chunk_number_offset)
 
-        return counter  # TODO add error handling
+            return counter  # TODO add error handling
 
     def _add_text(self, source_path: str, source_text: str, chunk_number_offset: int = 0, source_title: Optional[str] = None):
         """
@@ -307,20 +368,24 @@ class Collection:
         :param youtube_url:
         :return:
         """
-        # Grab the YouTube Video & convert to transcript text
-        tmp_outpath = 'temp_audio.mp3'
-        download_audio(youtube_url, tmp_outpath)
-        transcript_texts = _get_transcripts_from_audio_file(tmp_outpath)
 
-        # Ingest transcripts into the database
-        obj_count = 0
-        for transcript_text in transcript_texts:
-            obj_count += self._add_text(source_path=youtube_url, source_text=transcript_text,
-                                        chunk_number_offset=obj_count, source_title=get_youtube_title(youtube_url))
+        if self.check_if_obj_present(youtube_url):
+            return 0
+        else:
+            # Grab the YouTube Video & convert to transcript text
+            tmp_outpath = 'temp_audio.mp3'
+            download_audio(youtube_url, tmp_outpath)
+            transcript_texts = _get_transcripts_from_audio_file(tmp_outpath)
 
-        # Cleanup - if original file still exists
-        if os.path.exists(tmp_outpath):
-            os.remove(tmp_outpath)
+            # Ingest transcripts into the database
+            obj_count = 0
+            for transcript_text in transcript_texts:
+                obj_count += self._add_text(source_path=youtube_url, source_text=transcript_text,
+                                            chunk_number_offset=obj_count, source_title=get_youtube_title(youtube_url))
+
+            # Cleanup - if original file still exists
+            if os.path.exists(tmp_outpath):
+                os.remove(tmp_outpath)
 
         return obj_count
 
@@ -424,38 +489,70 @@ class Collection:
         :param debug:
         :return:
         """
-        entry_count = self._get_entry_count(source_path)
-        where_filter = {
-            "path": ["source_path"],
-            "operator": "Equal",
-            "valueText": source_path
-        }
-        property_names = self._get_all_property_names()
-        topic_prompt = f"""
-        Using plain language, summarize the following as a whole into a paragraph or two of text.
-        List the topics it covers, and what the reader might learn by listening to it. 
-        """
+        res = (
+            self.client.query.aggregate(SUMM_CLASS)
+            .with_where({
+                "path": ["source_path"],
+                "operator": "Equal",
+                "valueText": source_path
+            })
+            .with_meta_count().do()
+        )
+        count = res["data"]["Aggregate"][SUMM_CLASS][0]["meta"]["count"]
 
-        # TODO: Save summaries of long content to Weaviate so that they can be re-used
-        section_summaries = list()
-        for i in range((entry_count // MAX_N_CHUNKS) + 1):
+        if count > 0:
             response = (
-                self.client.query.get(self.target_class, property_names)
-                .with_where(where_filter)
-                .with_offset((i * MAX_N_CHUNKS))
-                .with_limit(MAX_N_CHUNKS)
-                .with_generate(
-                    grouped_task=topic_prompt
-                )
-                .do()
+                self.client.query.get(SUMM_CLASS, ["body", "source_path"])
+                .with_where({
+                    "path": ["source_path"],
+                    "operator": "Equal",
+                    "valueText": source_path
+                }).do()
             )
-            section_summaries.append(response)
-
-        if debug:
-            return section_summaries
+            summary = response["data"]["Get"][SUMM_CLASS][0]["body"]
+            return summary
         else:
-            section_summaries = [self._get_generated_result(s) for s in section_summaries]
-            return _summarize_multiple_paragraphs(section_summaries, custom_prompt)
+            entry_count = self._get_entry_count(source_path)
+            where_filter = {
+                "path": ["source_path"],
+                "operator": "Equal",
+                "valueText": source_path
+            }
+            property_names = self._get_all_property_names()
+            topic_prompt = f"""
+            Using plain language, summarize the following as a whole into a paragraph or two of text.
+            List the topics it covers, and what the reader might learn by listening to it. 
+            """
+
+            # TODO: Save summaries of long content to Weaviate so that they can be re-used
+            section_summaries = list()
+            for i in range((entry_count // MAX_N_CHUNKS) + 1):
+                response = (
+                    self.client.query.get(self.target_class, property_names)
+                    .with_where(where_filter)
+                    .with_offset((i * MAX_N_CHUNKS))
+                    .with_limit(MAX_N_CHUNKS)
+                    .with_generate(
+                        grouped_task=topic_prompt
+                    )
+                    .do()
+                )
+                section_summaries.append(response)
+
+            if debug:
+                return section_summaries
+            else:
+                section_summaries = [self._get_generated_result(s) for s in section_summaries]
+                summary = _summarize_multiple_paragraphs(section_summaries, custom_prompt)
+                self.client.data_object.create(
+                    data_object={
+                        "body": summary,
+                        "source_path": source_path
+                    },
+                    class_name=SUMM_CLASS,
+                    uuid=generate_uuid5(source_path)
+                )
+                return summary
 
     def summarize_topic(
             self, query_str: str,
@@ -490,35 +587,35 @@ class Collection:
         else:
             return self._generative_with_object(source_path=source_path, query_str=question, topic_prompt=topic_prompt)
 
-    def suggest_topics_to_learn(
-            self, query_str: str,
-            obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
-            debug: bool = False
-    ) -> str:
-        """
-        Given a topic, suggest sub-topics to learn based on contents of the DB
-        :param query_str:
-        :param obj_limit:
-        :param max_distance:
-        :param debug:
-        :return:
-        """
-        topic_prompt = f"""
-        If the following text does includes information about {query_str}, 
-        extract a list of three to six related sub-topics
-        related to {query_str} that the user might learn about.
-        Deliver the topics as a short list, each separated by two consecutive newlines like `\n\n`
-
-        If the following information does not includes information about {query_str}, 
-        tell the user that not enough information could not be found.
-        """
-
-        return self._generative_with_query(
-            query_str,
-            topic_prompt,
-            obj_limit=obj_limit, max_distance=max_distance,
-            debug=debug
-        )
+    # def suggest_topics_to_learn(  # TODO: Convert stuff like this to a set of prompts / enums
+    #         self, query_str: str,
+    #         obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
+    #         debug: bool = False
+    # ) -> str:
+    #     """
+    #     Given a topic, suggest sub-topics to learn based on contents of the DB
+    #     :param query_str:
+    #     :param obj_limit:
+    #     :param max_distance:
+    #     :param debug:
+    #     :return:
+    #     """
+    #     topic_prompt = f"""
+    #     If the following text does includes information about {query_str},
+    #     extract a list of three to six related sub-topics
+    #     related to {query_str} that the user might learn about.
+    #     Deliver the topics as a short list, each separated by two consecutive newlines like `\n\n`
+    #
+    #     If the following information does not includes information about {query_str},
+    #     tell the user that not enough information could not be found.
+    #     """
+    #
+    #     return self._generative_with_query(
+    #         query_str,
+    #         topic_prompt,
+    #         obj_limit=obj_limit, max_distance=max_distance,
+    #         debug=debug
+    #     )
 
 
 def add_default_class(client: Client) -> bool:
