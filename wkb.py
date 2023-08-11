@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import openai
 import os
 from typing import Optional, Union, List, Dict
+from enum import Enum
+from generative import get_prompt, Prompts
 from utils import (
     download_audio, get_youtube_title, _summarize_multiple_paragraphs, _get_transcripts_from_audio_file, load_wiki_page,
     load_data, chunk_text, MAX_CHUNK_WORDS
@@ -15,7 +17,7 @@ openai.api_key = os.environ["OPENAI_APIKEY"]
 MAX_CONTEXT_LENGTH = 1000
 MAX_N_CHUNKS = 1 + (MAX_CONTEXT_LENGTH // MAX_CHUNK_WORDS)
 WV_CLASS = "Knowledge_chunk"
-SUMM_CLASS = "Summary"
+SUMMARY_CLASS = "Summary"
 DB_BODY_PROPERTY = "body"
 CHUNK_NO_COL = "chunk_number"
 
@@ -27,7 +29,7 @@ BASE_CLASS_OBJ = {
     },
 }
 SUMMARY_CLASS_OBJ = {
-    "class": SUMM_CLASS,
+    "class": SUMMARY_CLASS,
     "vectorizer": "text2vec-openai",
     "moduleConfig": {
         "generative-openai": {}
@@ -48,14 +50,33 @@ class SourceData:
     source_title: Optional[str] = None
 
 
-def _extract_get_results(res, target_class):
+class ResponseExtract(Enum):
+    GET_OBJECTS = 10
+    AGGREGATE_COUNT = 20
+    GENERATE_GROUPEDRESULT = 30
+
+
+def _filter_source_path(source_path: str) -> dict:
+    return {
+        "path": ["source_path"],
+        "operator": "Equal",
+        "valueText": source_path
+    }
+
+
+def _parse_response(response: dict, target_class: str, extract: ResponseExtract = ResponseExtract.GET_OBJECTS):
     """
     Extract results from returned GET GraphQL call from Weaviate
-    :param res:
+    :param response:
     :param target_class:
     :return:
     """
-    return res["data"]["Get"][target_class]
+    if extract == ResponseExtract.GET_OBJECTS:
+        return response["data"]["Get"][target_class]
+    elif extract == ResponseExtract.GENERATE_GROUPEDRESULT:
+        return response["data"]["Get"][target_class][0]["_additional"]["generate"]["groupedResult"]
+    elif extract == ResponseExtract.AGGREGATE_COUNT:
+        return response["data"]["Aggregate"][target_class][0]["meta"]["count"]
 
 
 class Collection:
@@ -81,9 +102,22 @@ class Collection:
         self.client.schema.delete_class(self.target_class)
         add_default_class(self.client)
 
+    def get_unique_paths(self) -> List[str]:
+        response = (
+            self.client.query
+            .aggregate("Knowledge_chunk")
+            .with_group_by_filter(["source_path"])
+            .with_meta_count()
+            .with_fields("groupedBy { path value }")
+            .do()
+        )
+        groups = response["data"]["Aggregate"][self.target_class]
+        source_paths = [g["groupedBy"]["value"] for g in groups]
+        return source_paths
+
     def get_total_obj_count(self) -> Union[int, str]:
-        res = self.client.query.aggregate(self.target_class).with_meta_count().do()
-        return res["data"]["Aggregate"][self.target_class][0]["meta"]["count"]
+        response = self.client.query.aggregate(self.target_class).with_meta_count().do()
+        return _parse_response(response, self.target_class, ResponseExtract.AGGREGATE_COUNT)
 
     def get_sample_objs(self, max_objs: int = 3) -> List:
         """
@@ -98,7 +132,7 @@ class Collection:
             .with_limit(max_objs)
             .do()
         )
-        return _extract_get_results(response, self.target_class)
+        return _parse_response(response, self.target_class)
 
     def get_all_objs_by_path(
             self,
@@ -111,18 +145,12 @@ class Collection:
         """
         response = (
             self.client.query.get(self.target_class, self._get_all_property_names())
-            .with_where(
-                {
-                    "path": ["source_path"],
-                    "operator": "Equal",
-                    "valueText": source_path
-                }
-            )
+            .with_where(_filter_source_path(source_path))
             .with_sort({"path": [CHUNK_NO_COL], "order": "asc"})
             .do()
         )
 
-        return _extract_get_results(response, self.target_class)
+        return _parse_response(response, self.target_class)
 
     def _get_all_property_names(self) -> List[str]:
         """
@@ -148,20 +176,16 @@ class Collection:
             .with_meta_count()
             .do()
         )
-        return response["data"]["Aggregate"][self.target_class][0]["meta"]["count"]
+        return _parse_response(response, self.target_class, ResponseExtract.AGGREGATE_COUNT)
 
     def get_obj_sample(self, source_path):
         response = (
             self.client.query.get(self.target_class, ["source_path", "source_title"])
-            .with_where({
-                "path": ["source_path"],
-                "operator": "Equal",
-                "valueText": source_path
-            })
+            .with_where(_filter_source_path(source_path))
             .with_limit(1)
             .do()
         )
-        return response["data"]["Get"][self.target_class][0]
+        return _parse_response(response, self.target_class)[0]
 
     def check_if_obj_present(self, identifier: Union[str, SourceData]):
         if type(identifier) == SourceData:
@@ -197,7 +221,7 @@ class Collection:
             .with_limit(limit)
             .do()
         )
-        resp_data = response["data"]["Get"][self.target_class]
+        resp_data = _parse_response(response, self.target_class)
         return resp_data
 
     def _import_chunks_via_batch(self, chunks: List[str], base_object_data: Dict, chunk_number_offset: int):
@@ -226,15 +250,10 @@ class Collection:
                 self.client.query.aggregate(
                     class_name=WV_CLASS,
                 )
-                .with_where({
-                    "path": ["source_path"],
-                    "operator": "Equal",
-                    "valueText": source_data.source_path
-                })
+                .with_where(_filter_source_path(source_data.source_path))
                 .with_meta_count().do()
             )
-            count = response["data"]["Aggregate"][WV_CLASS][0]["meta"]["count"]
-            return count
+            return _parse_response(response, self.target_class, ResponseExtract.AGGREGATE_COUNT)
         except:
             return 0
 
@@ -395,7 +414,7 @@ class Collection:
         :param weaviate_response:
         :return:
         """
-        return weaviate_response["data"]["Get"][self.target_class][0]["_additional"]["generate"]["groupedResult"]
+        return _parse_response(weaviate_response, self.target_class, ResponseExtract.GENERATE_GROUPEDRESULT)
 
     def _generative_with_query(
             self, query_str: str,
@@ -457,13 +476,7 @@ class Collection:
                     "distance": max_distance
                 }
             )
-            .with_where(
-                {
-                    "path": ["source_path"],
-                    "operator": "Equal",
-                    "valueText": source_path
-                }
-            )
+            .with_where(_filter_source_path(source_path))
             .with_limit(obj_limit)
             .with_sort({"path": [CHUNK_NO_COL], "order": "asc"})
             .with_generate(
@@ -489,47 +502,32 @@ class Collection:
         :param debug:
         :return:
         """
-        res = (
-            self.client.query.aggregate(SUMM_CLASS)
-            .with_where({
-                "path": ["source_path"],
-                "operator": "Equal",
-                "valueText": source_path
-            })
+        response = (
+            self.client.query.aggregate(SUMMARY_CLASS)
+            .with_where(_filter_source_path(source_path))
             .with_meta_count().do()
         )
-        count = res["data"]["Aggregate"][SUMM_CLASS][0]["meta"]["count"]
+        count = _parse_response(response, SUMMARY_CLASS, ResponseExtract.AGGREGATE_COUNT)
 
         if count > 0:
             response = (
-                self.client.query.get(SUMM_CLASS, ["body", "source_path"])
-                .with_where({
-                    "path": ["source_path"],
-                    "operator": "Equal",
-                    "valueText": source_path
-                }).do()
+                self.client.query.get(SUMMARY_CLASS, ["body", "source_path"])
+                .with_where(_filter_source_path(source_path)).do()
             )
-            summary = response["data"]["Get"][SUMM_CLASS][0]["body"]
+            summary = _parse_response(response, SUMMARY_CLASS)["body"]
             return summary
         else:
             entry_count = self._get_entry_count(source_path)
-            where_filter = {
-                "path": ["source_path"],
-                "operator": "Equal",
-                "valueText": source_path
-            }
             property_names = self._get_all_property_names()
-            topic_prompt = f"""
-            Using plain language, summarize the following as a whole into a paragraph or two of text.
-            List the topics it covers, and what the reader might learn by listening to it. 
-            """
+            topic_prompt = get_prompt(Prompts.SUMMARIZE)
 
-            # TODO: Save summaries of long content to Weaviate so that they can be re-used
             section_summaries = list()
+
+            # Summarize subsections
             for i in range((entry_count // MAX_N_CHUNKS) + 1):
                 response = (
                     self.client.query.get(self.target_class, property_names)
-                    .with_where(where_filter)
+                    .with_where(_filter_source_path(source_path))
                     .with_offset((i * MAX_N_CHUNKS))
                     .with_limit(MAX_N_CHUNKS)
                     .with_generate(
@@ -544,12 +542,14 @@ class Collection:
             else:
                 section_summaries = [self._get_generated_result(s) for s in section_summaries]
                 summary = _summarize_multiple_paragraphs(section_summaries, custom_prompt)
+
+                # Add summary object
                 self.client.data_object.create(
                     data_object={
                         "body": summary,
                         "source_path": source_path
                     },
-                    class_name=SUMM_CLASS,
+                    class_name=SUMMARY_CLASS,
                     uuid=generate_uuid5(source_path)
                 )
                 return summary
@@ -568,11 +568,7 @@ class Collection:
         :param debug:
         :return:
         """
-        topic_prompt = f"""
-        Based on the following text, summarize any information relating to {query_str} concisely.
-        If the text does not contain required information, 
-        do not answer the question, and indicate as such to the user.
-        """
+        topic_prompt = get_prompt(Prompts.SUMMARIZE_WITH_CONTEXT, query_str)
 
         return self._generative_with_query(
             query_str,
@@ -587,35 +583,27 @@ class Collection:
         else:
             return self._generative_with_object(source_path=source_path, query_str=question, topic_prompt=topic_prompt)
 
-    # def suggest_topics_to_learn(  # TODO: Convert stuff like this to a set of prompts / enums
-    #         self, query_str: str,
-    #         obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
-    #         debug: bool = False
-    # ) -> str:
-    #     """
-    #     Given a topic, suggest sub-topics to learn based on contents of the DB
-    #     :param query_str:
-    #     :param obj_limit:
-    #     :param max_distance:
-    #     :param debug:
-    #     :return:
-    #     """
-    #     topic_prompt = f"""
-    #     If the following text does includes information about {query_str},
-    #     extract a list of three to six related sub-topics
-    #     related to {query_str} that the user might learn about.
-    #     Deliver the topics as a short list, each separated by two consecutive newlines like `\n\n`
-    #
-    #     If the following information does not includes information about {query_str},
-    #     tell the user that not enough information could not be found.
-    #     """
-    #
-    #     return self._generative_with_query(
-    #         query_str,
-    #         topic_prompt,
-    #         obj_limit=obj_limit, max_distance=max_distance,
-    #         debug=debug
-    #     )
+    def suggest_topics_to_learn(  # TODO: Convert stuff like this to a set of prompts / enums
+            self, query_str: str,
+            obj_limit: int = MAX_N_CHUNKS, max_distance: float = 0.28,
+            debug: bool = False
+    ) -> str:
+        """
+        Given a topic, suggest sub-topics to learn based on contents of the DB
+        :param query_str:
+        :param obj_limit:
+        :param max_distance:
+        :param debug:
+        :return:
+        """
+        topic_prompt = get_prompt(Prompts.SUB_TOPICS, query_str)
+
+        return self._generative_with_query(
+            query_str,
+            topic_prompt,
+            obj_limit=obj_limit, max_distance=max_distance,
+            debug=debug
+        )
 
 
 def add_default_class(client: Client) -> bool:
@@ -681,5 +669,3 @@ def build_weaviate_object(chunk_body: str, object_data: dict, chunk_number: int 
     if chunk_number is not None:
         wv_object[CHUNK_NO_COL] = chunk_number
     return wv_object
-
-

@@ -11,6 +11,12 @@ collection = wkb.Collection(client, wkb.WV_CLASS, user_agent=f'My Project ({os.g
 collection.set_apikey(openai_key=os.getenv("OPENAI_APIKEY"))  # The class is configured to use `text2vec-openai` and `generative-openai`
 
 st.title("KnowledgeBuddy")
+resource_selection = st.selectbox(
+    'Available resources in DB:',
+    collection.get_unique_paths())
+
+st.write('You selected:', resource_selection)
+
 youtube_url = st.text_input("Enter a YouTube video URL that you're interested in!")
 
 if len(youtube_url) > 0:
