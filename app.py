@@ -17,26 +17,44 @@ resource_selection = st.selectbox(
 
 st.write('You selected:', resource_selection)
 
-youtube_url = st.text_input("Enter a YouTube video URL that you're interested in!")
+resource_url = st.text_input("Enter a YouTube video URL or PDF url that you're interested in!")
 
-if len(youtube_url) > 0:
-    if collection.check_if_obj_present(youtube_url):
+if len(resource_url) > 0:
+    if collection.check_if_obj_present(resource_url):
         st.text("Object present!")
-        video_title = collection.get_obj_sample(youtube_url)
-        st.write(f"{video_title['source_title']} found")
+        if resource_url.endswith(".pdf"):
+            pass
+        else:
+            video_title = collection.get_obj_sample(resource_url)
+            st.write(f"{video_title['source_title']} found")
+
+        # Show resource summary
         with st.expander("See the summary", expanded=False):
             st.write(
-                collection.summarize_entry(youtube_url)
+                collection.summarize_entry(resource_url)
             )
-        question = st.text_input("Ask the video something!")
+
+        # Talk to it
+        question = st.text_input("Ask it something!")
         if len(question) > 0:
             st.write(
-                collection.ask_object(youtube_url, question)
+                collection.ask_object(resource_url, question)
             )
+
+        # Delete it?
+        if st.button(f"Delete {resource_url} from DB"):
+            st.write(f"Deleting {resource_url} from the database... please wait...")
+            collection.remote_from_db(resource_url)
+            st.experimental_rerun()
     else:
         st.text("Object not present")
         if st.button("Add it to DB?"):
-            st.write(f"Adding {youtube_url} to the database... please wait...")
-            collection.add_from_youtube(youtube_url)
+            st.write(f"Adding {resource_url} to the database... please wait...")
+
+            if resource_url.endswith(".pdf"):
+                collection.add_pdf(resource_url)
+            else:
+                collection.add_from_youtube(resource_url)
             st.experimental_rerun()
+
 

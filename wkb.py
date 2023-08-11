@@ -115,6 +115,13 @@ class Collection:
         source_paths = [g["groupedBy"]["value"] for g in groups]
         return source_paths
 
+    def remote_from_db(self, source_path):
+        self.client.batch.delete_objects(
+            class_name=WV_CLASS,
+            where=_filter_source_path(source_path),
+        )
+        return True
+
     def get_total_obj_count(self) -> Union[int, str]:
         response = self.client.query.aggregate(self.target_class).with_meta_count().do()
         return _parse_response(response, self.target_class, ResponseExtract.AGGREGATE_COUNT)
@@ -514,7 +521,7 @@ class Collection:
                 self.client.query.get(SUMMARY_CLASS, ["body", "source_path"])
                 .with_where(_filter_source_path(source_path)).do()
             )
-            summary = _parse_response(response, SUMMARY_CLASS)["body"]
+            summary = _parse_response(response, SUMMARY_CLASS)[0]["body"]
             return summary
         else:
             entry_count = self._get_entry_count(source_path)
