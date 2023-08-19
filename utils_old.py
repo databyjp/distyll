@@ -26,39 +26,7 @@ def get_youtube_title(link: str):
         return info_dict.get('title', None)
 
 
-def _summarize_multiple_paragraphs(paragraphs: List, topic_prompt: str = None) -> str:
-    """
-    Helper function for summarizing multiple paragraphs using an LLM
-    :param paragraphs:
-    :return:
-    """
-    if topic_prompt is None:
-        topic_prompt = f"""
-        Hello! Please summarize the following as a whole into two or three paragraphs of text.
-        List the topics it covers, and what the reader might learn by listening to it
-        {("=" * 10)}
-        {paragraphs}
-        """
-    else:
-        topic_prompt = f"""
-        {topic_prompt}
-        {("=" * 10)}
-        {paragraphs}        
-        """
 
-    completion = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system",
-             "content": """
-                You are a helpful assistant who can summarize information very well in 
-                clear, concise language without resorting to domain-specific jargon.
-                """
-             },
-            {"role": "user", "content": topic_prompt}
-        ]
-    )
-    return completion.choices[0].message["content"]
 
 
 def _get_transcripts_from_audio_file(audio_file_path: str) -> List:

@@ -1,12 +1,22 @@
+from dataclasses import dataclass
 from typing import List
 from pypdf import PdfReader
 import requests
 from io import BytesIO
+import openai
 
 
 MAX_CHUNK_WORDS = 100  # Max chunk size - in words
 MAX_CONTEXT_LENGTH = 1000  # Max length of a context
 MAX_N_CHUNKS = 1 + (MAX_CONTEXT_LENGTH // MAX_CHUNK_WORDS)
+
+@dataclass
+class PROMPTS:
+    RAG_PREAMBLE = "Using only the included data here, answer the following question:"
+    SUMMARIZE = f"""
+        Using plain language, summarize the following as a whole into a paragraph or two of text.
+        List the topics it covers, and what the reader might learn from it. 
+        """
 
 
 def chunk_text(str_in: str) -> List:
@@ -65,3 +75,26 @@ def download_and_parse_pdf(pdf_url):
         pdf_text += "\n" + page.extract_text()
 
     return pdf_text
+
+
+def summarize_multiple_paragraphs(paragraphs: List) -> str:
+    """
+    Helper function for summarizing multiple paragraphs using an LLM
+    :param paragraphs:
+    :return:
+    """
+    topic_prompt = PROMPTS.SUMMARIZE + ("=" * 10) + str(paragraphs)
+
+    completion = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system",
+             "content": """
+                You are a helpful assistant who can summarize information very well in 
+                clear, concise language without resorting to domain-specific jargon.
+                """
+             },
+            {"role": "user", "content": topic_prompt}
+        ]
+    )
+    return completion.choices[0].message["content"]

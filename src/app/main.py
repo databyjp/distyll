@@ -25,13 +25,6 @@ def add_to_weaviate(url: str) -> str:
         return "not supported"
 
 
-def ask_question(url: str, question: str) -> (List, str):
-    return (
-        ["Weaviate Object 1", "Weaviate Object 2"],
-        f"The answer to '{question}' about content from {url} is: [dummy answer]."
-    )
-
-
 def mock_summary(url: str) -> str:
     return f"Mocked summary for the content at {url}."
 
@@ -71,8 +64,8 @@ async def ask_about_content(query: Question):
 
 @app.post("/summarise/")
 async def summarise_content(submission: URLSubmission):
-    # Using the mocked function to generate a summary
-    summary = mock_summary(submission.url)
+    summary = chunks.summarize_entry(submission.url)
+    # TODO: Save summaries of long content to Weaviate so that they can be re-used
     return {"summary": summary}
 
 

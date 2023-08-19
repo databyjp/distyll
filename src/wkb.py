@@ -9,7 +9,7 @@ import os
 from weaviate.util import generate_uuid5
 
 import utils
-from utils import MAX_CHUNK_WORDS, MAX_N_CHUNKS
+from utils import MAX_N_CHUNKS, PROMPTS
 
 openai.api_key = os.environ["OPENAI_APIKEY"]
 
@@ -24,10 +24,6 @@ CLASS_CONFIG = {
         "generative-openai": {}
     },
 }
-
-@dataclass
-class PROMPTS:
-    RAG_PREAMBLE = "Using only the included data here, answer the following question:"
 
 
 def create_class_obj(collection_name):
@@ -77,6 +73,24 @@ class Collection:
     def reinitialize_db(self):
         self.client.schema.delete_class(self.target_class)
         add_default_classes(self.client)
+
+    def _get_entry_count(self, source_path: str) -> int:
+        """
+        Get the number of objects available in a source path
+        :param source_path:
+        :return:
+        """
+        response = (
+            self.client.query.aggregate(self.target_class)
+            .with_where({
+                "path": "source_path",
+                "operator": "Equal",
+                "valueText": source_path
+            })
+            .with_meta_count()
+            .do()
+        )
+        return response["data"]["Aggregate"][self.target_class][0]["meta"]["count"]
 
     def get_total_obj_count(self) -> Union[int, str]:
         res = self.client.query.aggregate(self.target_class).with_meta_count().do()
@@ -206,6 +220,48 @@ class Collection:
             response["data"]["Get"][self.target_class],
             self._get_generated_result(response)
         )
+
+    def summarize_entry(
+            self, source_path: str,
+            debug: bool = False
+    ) -> Union[str, List]:
+        """
+        Summarize all objects for a particular entry
+        :param source_path:
+        :param debug:
+        :return:
+        """
+        entry_count = self._get_entry_count(source_path)
+        where_filter = {
+            "path": ["source_path"],
+            "operator": "Equal",
+            "valueText": source_path
+        }
+        property_names = self._get_all_property_names()
+        topic_prompt = PROMPTS.SUMMARIZE
+
+        section_summaries = list()
+        summary_sets = (entry_count // MAX_N_CHUNKS) + 1
+        # summary_sets = min(summary_sets, 3)  # For debugging
+        for i in range(summary_sets):
+            print(f"Summarizing set {i+1} of {summary_sets}")
+            response = (
+                self.client.query.get(self.target_class, property_names)
+                .with_where(where_filter)
+                .with_offset((i * MAX_N_CHUNKS))
+                .with_limit(MAX_N_CHUNKS)
+                .with_generate(
+                    grouped_task=topic_prompt
+                )
+                .do()
+            )
+            section_summaries.append(response)
+
+        if debug:
+            return section_summaries
+        else:
+            section_summaries = [self._get_generated_result(s) for s in section_summaries]
+            return utils.summarize_multiple_paragraphs(section_summaries)
 
 
 def add_default_classes(client: Client) -> bool:
