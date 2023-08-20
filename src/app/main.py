@@ -19,9 +19,9 @@ def add_to_weaviate(url: str) -> bool:
     :return:
     """
     print(f"Adding {url} chunks to the database")
-    chunks.add_pdf(url)
+    distyll.add_pdf(chunks, url)
     print(f"Summarizing {url} chunks")
-    summary = chunks.summarize_entry(url)
+    summary = distyll.summarize_entry(chunks, url)
     print(f"Saving summary to DB")
     sources.add_object({
         "source_path": url,
@@ -92,7 +92,7 @@ def get_summary(submission: URLSubmission):
         .with_where(distyll.source_filter(submission.url))
         .with_limit(1)
     )
-    summary = response["data"]["Get"][sources.chunk_class][0][distyll.COLLECTION_BODY_PROPERTY]
+    summary = response["data"]["Get"][sources.target_class][0][distyll.COLLECTION_BODY_PROPERTY]
     return {"summary": summary}
 
 

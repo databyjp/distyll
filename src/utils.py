@@ -8,7 +8,6 @@ import openai
 
 MAX_CHUNK_WORDS = 100  # Max chunk size - in words
 MAX_CONTEXT_LENGTH = 1000  # Max length of a context
-MAX_PARAGRAPHS = 10  # Max number of paragraphs to summarize at a time
 MAX_N_CHUNKS = 1 + (MAX_CONTEXT_LENGTH // MAX_CHUNK_WORDS)
 
 @dataclass
@@ -102,14 +101,14 @@ def summarize_multiple_paragraphs(paragraphs: List) -> Union[str, List]:
     :return:
     """
     paragraph_count = len(paragraphs)
-    if paragraph_count < MAX_PARAGRAPHS:
+    if paragraph_count < MAX_N_CHUNKS:
         print(f"Summarizing {paragraph_count} paragraphs")
         return summarize_paragraph_set(paragraphs)
     else:
         print(f"{paragraph_count} paragraphs is too many - let's split them up")
         summary_sets = (paragraph_count // MAX_N_CHUNKS) + 1
         subsets = [
-            paragraphs[MAX_PARAGRAPHS*i:MAX_PARAGRAPHS*(i+1)] for i in range(summary_sets)
+            paragraphs[MAX_N_CHUNKS*i:MAX_N_CHUNKS*(i+1)] for i in range(summary_sets)
         ]
         summaries = [
             summarize_paragraph_set(subset) for subset in subsets

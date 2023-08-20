@@ -22,13 +22,13 @@ class Collection:
     #     else:
     #         self.user_agent = user_agent
     #
-    # def set_apikey(self, openai_key: Optional[str] = None, cohere_key: Optional[str] = None):
-    #
-    #     if openai_key:
-    #         self.client._connection._headers["x-openai-api-key"] = openai_key
-    #
-    #     if cohere_key:
-    #         self.client._connection._headers["x-cohere-api-key"] = cohere_key
+    def set_apikey(self, openai_key: Optional[str] = None, cohere_key: Optional[str] = None):
+
+        if openai_key:
+            self.client._connection._headers["x-openai-api-key"] = openai_key
+
+        if cohere_key:
+            self.client._connection._headers["x-cohere-api-key"] = cohere_key
     #
     # def reinitialize_db(self):
     #     self.client.schema.delete_class(self.target_class)
