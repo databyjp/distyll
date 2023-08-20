@@ -9,12 +9,12 @@
 - Unofficial personal project - for educational purposes only
 
 ### Features
-- **URL Submission**: Quickly submit any URL for processing.
+- **Convenient content ingestion**: Quickly add a resource for processing.
 - **Content Summarization**: Extract the main points of any content.
 - **Ask Questions**: Engage with the distilled content by asking questions and receiving concise answers.
 
 ### Getting Started
-- **Submit a URL**: Use the `/submit/` endpoint to start the distillation process.
+- **Add object**: Use the `/add/` endpoint to start the distillation process.
 - **Summarize**: Once processed, access the `/summarise/` endpoint to get a brief summary.
 - **Ask Away**: Engage with the content using the `/ask/` endpoint to get answers related to the distilled content.
 

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Union
 from pypdf import PdfReader
 import requests
 from io import BytesIO
@@ -8,6 +8,7 @@ import openai
 
 MAX_CHUNK_WORDS = 100  # Max chunk size - in words
 MAX_CONTEXT_LENGTH = 1000  # Max length of a context
+MAX_PARAGRAPHS = 10  # Max number of paragraphs to summarize at a time
 MAX_N_CHUNKS = 1 + (MAX_CONTEXT_LENGTH // MAX_CHUNK_WORDS)
 
 @dataclass
@@ -77,14 +78,8 @@ def download_and_parse_pdf(pdf_url):
     return pdf_text
 
 
-def summarize_multiple_paragraphs(paragraphs: List) -> str:
-    """
-    Helper function for summarizing multiple paragraphs using an LLM
-    :param paragraphs:
-    :return:
-    """
+def summarize_paragraph_set(paragraphs: List) -> str:
     topic_prompt = PROMPTS.SUMMARIZE + ("=" * 10) + str(paragraphs)
-
     completion = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[
@@ -98,3 +93,25 @@ def summarize_multiple_paragraphs(paragraphs: List) -> str:
         ]
     )
     return completion.choices[0].message["content"]
+
+
+def summarize_multiple_paragraphs(paragraphs: List) -> Union[str, List]:
+    """
+    Helper function for summarizing multiple paragraphs using an LLM
+    :param paragraphs:
+    :return:
+    """
+    paragraph_count = len(paragraphs)
+    if paragraph_count < MAX_PARAGRAPHS:
+        print(f"Summarizing {paragraph_count} paragraphs")
+        return summarize_paragraph_set(paragraphs)
+    else:
+        print(f"{paragraph_count} paragraphs is too many - let's split them up")
+        summary_sets = (paragraph_count // MAX_N_CHUNKS) + 1
+        subsets = [
+            paragraphs[MAX_PARAGRAPHS*i:MAX_PARAGRAPHS*(i+1)] for i in range(summary_sets)
+        ]
+        summaries = [
+            summarize_paragraph_set(subset) for subset in subsets
+        ]
+        return summarize_multiple_paragraphs(summaries)

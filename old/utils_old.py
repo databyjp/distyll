@@ -91,7 +91,7 @@ def load_txt_file(txt_path: Path = None) -> str:
     :return:
     """
     if txt_path is None:
-        txt_path = Path("demodata/kubernetes_concepts_overview.txt")
+        txt_path = Path("../demodata/kubernetes_concepts_overview.txt")
     return txt_path.read_text()
 
 
