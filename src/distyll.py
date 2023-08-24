@@ -33,6 +33,12 @@ class SourceData:
 
 
 def create_class_obj(collection_name, properties):
+    """
+    Create a object for a particular class
+    :param collection_name:
+    :param properties:
+    :return:
+    """
     return {
         "class": collection_name,
         "properties": properties,
@@ -55,6 +61,11 @@ DEFAULT_CLASSES = {
 
 
 def source_filter(value):
+    """
+    Build a filter for convenience
+    :param value:
+    :return:
+    """
     return {
         "path": "source_path",
         "operator": "Equal",
@@ -69,6 +80,11 @@ class Collection:
         self.target_class = target_class
 
     def add_object(self, data_object):
+        """
+        Add an object to the collection
+        :param data_object:
+        :return:
+        """
         self.client.data_object.create(
             data_object=data_object,
             class_name=self.target_class
@@ -98,8 +114,107 @@ class Collection:
         return response["data"]["Aggregate"][self.target_class][0]["meta"]["count"]
 
     def get_total_obj_count(self) -> Union[int, str]:
+        """
+        Get a total object count of this collection
+        :return:
+        """
         res = self.client.query.aggregate(self.target_class).with_meta_count().do()
         return res["data"]["Aggregate"][self.target_class][0]["meta"]["count"]
+
+    def _import_chunks(self, chunks: List[str], base_object_data: Dict, chunk_number_offset: int):
+        """
+        Import text chunks via batch import process
+        :param chunks:
+        :param base_object_data:
+        :param chunk_number_offset:
+        :return:
+        """
+        counter = 0
+        self.client.batch.configure(batch_size=100)
+        with self.client.batch as batch:
+            for i, c in enumerate(chunks):
+                wv_obj = build_weaviate_object(c, base_object_data, chunk_number=i+chunk_number_offset)
+                batch.add_data_object(
+                    class_name=self.target_class,
+                    data_object=wv_obj,
+                    uuid=generate_uuid5(wv_obj)
+                )
+                counter += 1
+        return counter
+
+    def _add_to_database(
+            self, source_data: SourceData, chunk_number_offset: int = 0
+    ) -> int:
+        """
+        Add objects to Weaviate
+        :param source_data: DataClass of source data, with "source_path" and "source_text"
+        :return:
+        """
+        chunks = utils.chunk_text(source_data.source_text)
+
+        object_data = {
+            "source_path": str(source_data.source_path),
+            "source_title": getattr(source_data, "source_title", None)
+        }
+
+        counter = self._import_chunks(chunks, object_data, chunk_number_offset)
+
+        return counter
+
+    def _add_text(self, source_path: str, source_text: str, chunk_number_offset: int = 0, source_title: Optional[str] = None):
+        """
+        Add data from text input
+        :param source_path:
+        :param source_text:
+        :return:
+        """
+        src_data = SourceData(
+            source_path=source_path,
+            source_text=source_text,
+            source_title=source_title,
+        )
+        print(f"Adding the data from {source_path}")
+        return self._add_to_database(src_data, chunk_number_offset=chunk_number_offset)
+
+    def add_pdf(self, pdf_url: str) -> int:
+        """
+        Add a PDF to the database
+        :param pdf_url:
+        :return:
+        """
+        text_content = utils.download_and_parse_pdf(pdf_url)
+        return self._add_text(
+            source_path=pdf_url,
+            source_text=text_content,
+            source_title=pdf_url
+        )
+
+    def summarize_entry(
+            self, source_path: str,
+    ) -> str:
+        """
+        Summarize all objects for a particular entry
+        :param source_path:
+        :return:
+        """
+        entry_count = self.get_entry_count(source_path)
+        print(f"entry count: {entry_count}")
+        property_names = self.get_all_property_names()
+
+        chunk_texts = list()
+        summary_sets = (entry_count // MAX_N_CHUNKS) + 1
+        for i in range(summary_sets):
+            response = (
+                self.client.query.get(self.target_class, property_names)
+                .with_where(source_filter(source_path))
+                .with_offset((i * MAX_N_CHUNKS))
+                .with_limit(MAX_N_CHUNKS)
+                .do()
+            )
+            chunk_texts_subset = [r[COLLECTION_BODY_PROPERTY] for r in response["data"]["Get"][self.target_class]]
+            chunk_texts += chunk_texts_subset
+        print(f"passing chunks: {len(chunk_texts)}")
+        return utils.summarize_multiple_paragraphs(chunk_texts)
 
 
 def add_default_classes(client: Client) -> bool:
@@ -149,7 +264,12 @@ def start_db(version: str = "latest", custom_client: Client = None) -> Client:
     return client
 
 
-def reinitialize_db(client):
+def reinitialize_db(client: Client):
+    """
+    Delete existing data
+    :param client:
+    :return:
+    """
     for c in DEFAULT_CLASSES["classes"]:
         client.schema.delete_class(c["class"])
     add_default_classes(client)
@@ -173,76 +293,12 @@ def build_weaviate_object(chunk_body: str, object_data: dict, chunk_number: int 
     return wv_object
 
 
-# ===== DATA OPERATIONS =====
-def _import_chunks(collection: Collection, chunks: List[str], base_object_data: Dict, chunk_number_offset: int):
-    """
-    Import text chunks via batch import process
-    :param chunks:
-    :param base_object_data:
-    :param chunk_number_offset:
-    :return:
-    """
-    counter = 0
-    with collection.client.batch() as batch:
-        for i, c in enumerate(chunks):
-            wv_obj = build_weaviate_object(c, base_object_data, chunk_number=i+chunk_number_offset)
-            batch.add_data_object(
-                class_name=collection.target_class,
-                data_object=wv_obj,
-                uuid=generate_uuid5(wv_obj)
-            )
-            counter += 1
-    return counter
-
-
-def _add_to_database(
-        collection: Collection, source_data: SourceData, chunk_number_offset: int = 0
-) -> int:
-    """
-    Add objects to Weaviate
-    :param source_data: DataClass of source data, with "source_path" and "source_text"
-    :return:
-    """
-    chunks = utils.chunk_text(source_data.source_text)
-
-    object_data = {
-        "source_path": str(source_data.source_path),
-        "source_title": getattr(source_data, "source_title", None)
-    }
-
-    counter = _import_chunks(collection, chunks, object_data, chunk_number_offset)
-
-    return counter
-
-
-def _add_text(collection: Collection, source_path: str, source_text: str, chunk_number_offset: int = 0, source_title: Optional[str] = None):
-    """
-    Add data from text input
-    :param source_path:
-    :param source_text:
-    :return:
-    """
-    src_data = SourceData(
-        source_path=source_path,
-        source_text=source_text,
-        source_title=source_title,
-    )
-    print(f"Adding the data from {source_path}")
-    return _add_to_database(collection, src_data, chunk_number_offset=chunk_number_offset)
-
-
-def add_pdf(collection, pdf_url: str) -> int:
-    text_content = utils.download_and_parse_pdf(pdf_url)
-    return _add_text(
-        collection=collection,
-        source_path=pdf_url,
-        source_text=text_content,
-        source_title=pdf_url
-    )
-
-
-def ask_object(client: Client, source_path: str, question: str, topic_prompt: Optional[str] = None) -> str:
+# ===== QUERIES =====
+def ask_object(client: Client, source_path: str, search_string: str, question: Optional[str] = None) -> (str, Dict):
     print("Getting summary")
+    if question is None:
+        question = search_string
+
     summmary_response = (
         client.query.get(COLLECTION_NAME_SOURCES, "body")
         .with_where(source_filter(source_path))
@@ -255,59 +311,50 @@ def ask_object(client: Client, source_path: str, question: str, topic_prompt: Op
     chunks_response = (
         client.query.get(COLLECTION_NAME_CHUNKS, "body")
         .with_where(source_filter(source_path))
-        .with_near_text({"concepts": question})
+        .with_near_text({"concepts": search_string})
         .with_limit(MAX_N_CHUNKS)
         .do()
     )
     chunks = [c["body"] for c in chunks_response["data"]["Get"][COLLECTION_NAME_CHUNKS]]
 
-    paragraphs = [summary] + chunks
-    print(f"Got {len(paragraphs)} paragraphs")
+    paragraphs = {
+        "summary": summary,
+        "chunks": chunks
+    }
+    print(f"Got {len(paragraphs['chunks'])} paragraphs")
 
     prompt = f"""
     Based on the following text, answer {question}.
-    If the text does not contain required information, 
-    do not answer the question, and indicate as such to the user.        
+    If the text does not contain required information,
+    do not answer the question, and indicate as such to the user.
     """
 
-    topic_prompt = prompt + ("=" * 10) + str(paragraphs)
+    full_prompt = prompt + ("=" * 10) + str(paragraphs)
     completion = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system",
              "content": """
-                You are a helpful assistant who can summarize information very well in 
+                You are a helpful assistant who can summarize information very well in
                 clear, concise language without resorting to domain-specific jargon.
                 """
              },
-            {"role": "user", "content": topic_prompt}
+            {"role": "user", "content": full_prompt}
         ]
     )
-    return completion.choices[0].message["content"]
+    return completion.choices[0].message["content"], paragraphs
 
 
-def summarize_entry(
-        collection: Collection, source_path: str,
-) -> str:
-    """
-    Summarize all objects for a particular entry
-    :param collection:
-    :param source_path:
-    :return:
-    """
-    entry_count = collection.get_entry_count(source_path)
-    property_names = collection.get_all_property_names()
-
-    chunk_texts = list()
-    summary_sets = (entry_count // MAX_N_CHUNKS) + 1
-    for i in range(summary_sets):
-        response = (
-            collection.client.query.get(collection.target_class, property_names)
-            .with_where(source_filter(source_path))
-            .with_offset((i * MAX_N_CHUNKS))
-            .with_limit(MAX_N_CHUNKS)
-            .do()
-        )
-        chunk_texts_subset = [r[COLLECTION_BODY_PROPERTY] for r in response["data"]["Get"][self.target_class]]
-        chunk_texts += chunk_texts_subset
-    return utils.summarize_multiple_paragraphs(chunk_texts)
+def get_search_string_from_question(question: str) -> str:
+    answer = utils.ask_chatgpt(
+        f"""
+        What would be a suitable semantic search query string that would 
+        return relevant data to help answer the following question? 
+        Remember that semantic search works by comparing the semantic meaning 
+        of one object against another.
+        Provide the search string only, and nothing else. 
+        The question is: {question}
+        """
+    )
+    print(f"Using {answer} to retrieve paragraphs for the question: {question}")
+    return answer

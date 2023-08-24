@@ -4,6 +4,13 @@
 ### Overview
 **distyll.info** is a content-distillation tool designed to help you make the most out of online content. By providing a simple URL, users can have a video, article, or document distilled into its core essence, making information consumption faster and more efficient.
 
+#### How to run
+- Clone the repo
+- Create a virtual environment
+- Activate the virtual environment
+- Run `pip install -r requirements.txt`
+- Run `python -m app.main`
+
 #### Notes
 - Powered by [Weaviate](https://www.weaviate.io)
 - Unofficial personal project - for educational purposes only
