@@ -161,7 +161,7 @@ class Collection:
 
         return counter
 
-    def _add_text(self, source_path: str, source_text: str, chunk_number_offset: int = 0, source_title: Optional[str] = None):
+    def add_text(self, source_path: str, source_text: str, chunk_number_offset: int = 0, source_title: Optional[str] = None):
         """
         Add data from text input
         :param source_path:
@@ -183,11 +183,36 @@ class Collection:
         :return:
         """
         text_content = utils.download_and_parse_pdf(pdf_url)
-        return self._add_text(
+        return self.add_text(
             source_path=pdf_url,
             source_text=text_content,
             source_title=pdf_url
         )
+
+    # def add_from_youtube(self, youtube_url: str) -> int:
+    #     """
+    #     Add the transcript of a YouTube video to Weaviate
+    #     :param youtube_url:
+    #     :return:
+    #     """
+    #     # Grab the YouTube Video & convert to transcript text
+    #     tmp_outpath = 'temp_audio.mp3'
+    #     utils.download_audio(youtube_url, tmp_outpath)
+    #     transcript_texts = utils._get_transcripts_from_audio_file(tmp_outpath)
+    #
+    #     # Ingest transcripts into the database
+    #     obj_count = 0
+    #     for transcript_text in transcript_texts:
+    #         obj_count += self.add_text(
+    #             source_path=youtube_url, source_text=transcript_text,
+    #             chunk_number_offset=obj_count, source_title=utils.get_youtube_title(youtube_url)
+    #         )
+    #
+    #     # Cleanup - if original file still exists
+    #     if os.path.exists(tmp_outpath):
+    #         os.remove(tmp_outpath)
+    #
+    #     return obj_count
 
     def summarize_entry(
             self, source_path: str,

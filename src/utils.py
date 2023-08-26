@@ -4,11 +4,14 @@ from pypdf import PdfReader
 import requests
 from io import BytesIO
 import openai
+import yt_dlp
+import os
 
 
 MAX_CHUNK_WORDS = 150  # Max chunk size - in words
 MAX_CHUNK_CHARS = 500  # Max chunk size - in characters
 MAX_N_CHUNKS = 15  # Max number of chunks to grab in a set of results
+
 
 @dataclass
 class PROMPTS:
@@ -115,6 +118,25 @@ def download_and_parse_pdf(pdf_url):
     return pdf_text
 
 
+def download_youtube(link: str, outpath: str, audio_only: bool = True):
+    if audio_only:
+        yt_dlp_params = {'extract_audio': True, 'format': 'bestaudio', 'outtmpl': outpath, 'quiet': True, 'cachedir': False}
+    else:
+        yt_dlp_params = {'format': 'best', 'outtmpl': outpath, 'quiet': True, 'cachedir': False}
+
+    with yt_dlp.YoutubeDL(yt_dlp_params) as video:
+
+        if os.path.exists(outpath):
+            os.remove(outpath)
+
+        info_dict = video.extract_info(link, download=True)
+        video_title = info_dict['title']
+        print(f"Found {video_title} - downloading")
+        video.download(link)
+        print(f"Successfully Downloaded to {outpath}")
+    return True
+
+
 def summarize_paragraph_set(paragraphs: List) -> str:
     topic_prompt = PROMPTS.SUMMARIZE + ("=" * 10) + str(paragraphs)
     completion = openai.ChatCompletion.create(
@@ -167,10 +189,89 @@ def ask_chatgpt(prompt: str) -> str:
         messages=[
             {"role": "system",
              "content": """
-                You are a helpful, intelligent, AI assistant. Please answer the following question the best you can. 
+                You are a helpful, intelligent, AI assistant. Please answer the following question the best you can.
                 """
              },
             {"role": "user", "content": prompt}
         ]
     )
     return completion.choices[0].message["content"]
+
+
+# ==========
+
+
+def download_audio(link: str, outpath: str):
+    with yt_dlp.YoutubeDL({
+        'extract_audio': True, 'format': 'bestaudio', 'outtmpl': outpath, 'quiet': True, 'cachedir': False
+    }) as video:
+
+        if os.path.exists(outpath):
+            os.remove(outpath)
+
+        info_dict = video.extract_info(link, download=True)
+        video_title = info_dict['title']
+        print(f"Found {video_title} - downloading")
+        video.download(link)
+        print(f"Successfully Downloaded to {outpath}")
+
+
+def get_youtube_title(link: str):
+    with yt_dlp.YoutubeDL({'quiet': True, 'cachedir': False}) as ydl:
+        info_dict = ydl.extract_info(link, download=False)
+        return info_dict.get('title', None)
+
+
+def _get_transcripts_from_audio_file(audio_file_path: str) -> List:
+    """
+    Get transcripts of audio files using
+    :param audio_file_path:
+    :return:
+    """
+
+    clip_outpaths = _split_audio_files(audio_file_path)
+    transcript_texts = list()
+    print(f"Getting transcripts from {len(clip_outpaths)} audio files...")
+    for i, clip_outpath in enumerate(clip_outpaths):
+        print(f"Processing transcript {i+1} of {len(clip_outpaths)}...")
+        with open(clip_outpath, "rb") as audio_file:
+            transcript = openai.Audio.transcribe("whisper-1", audio_file)
+            transcript_texts.append(transcript["text"])
+
+    # Clean up
+    for clip_outpath in clip_outpaths:
+        os.remove(clip_outpath)
+
+    return transcript_texts
+
+
+def _split_audio_files(audio_file_path: str) -> List:
+    """
+    Split long audio files
+    (e.g. so that they fit within the allowed size for Whisper)
+    :param audio_file_path:
+    :return: A list of file paths
+    """
+    from pydub import AudioSegment
+
+    audio = AudioSegment.from_file(audio_file_path)
+
+    # Split long audio into 15-minute clips
+    segment_len = 900
+    clip_outpaths = list()
+
+    if audio.duration_seconds > segment_len:
+        n_segments = 1 + int(audio.duration_seconds) // segment_len
+        print(f"Splitting audio to {n_segments}")
+        for i in range(n_segments):
+            start = max(0, (i * segment_len) - 10) * 1000
+            end = ((i + 1) * segment_len) * 1000
+            clip = audio[start:end]
+            clip_outpath = f"{i}_" + audio_file_path
+            outfile = clip.export(f"{i}_" + audio_file_path)
+            outfile.close()
+            clip_outpaths.append(clip_outpath)
+        return clip_outpaths
+    else:
+        print(f"Audio file under {segment_len} seconds. No split required.")
+        return [audio_file_path]
