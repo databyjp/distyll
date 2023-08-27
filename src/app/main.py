@@ -1,10 +1,10 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-import distyll
+import db
 
-client = distyll.start_db()
-chunks = distyll.Collection(client, distyll.COLLECTION_NAME_CHUNKS)
-sources = distyll.Collection(client, distyll.COLLECTION_NAME_SOURCES)
+client = db.start_db()
+chunks = db.Collection(client, db.COLLECTION_NAME_CHUNKS)
+sources = db.Collection(client, db.COLLECTION_NAME_SOURCES)
 
 app = FastAPI(
     title="distyll.info",
@@ -107,23 +107,25 @@ async def submit_text(submission: TextSubmission, background_tasks: BackgroundTa
         return {"status": "Text processing started"}
 
 
-@app.post("/ask/")
-async def ask_about_content(query: Question):
-    search_string = distyll.get_search_string_from_question(query.question)
-    answer, paragraphs = distyll.ask_object(client=client, source_path=query.url,
-                                            search_string=search_string, question=query.question)
-    return {"answer": answer, "source_paragraphs": paragraphs}
+# @app.post("/ask/")
+# async def ask_about_content(query: Question):
+#     search_string = db.get_search_string_from_question(query.question)
+#     answer, paragraphs = db.ask_object(
+#         client=client, source_path=query.url,
+#         search_string=search_string, question=query.question
+#     )
+#     return {"answer": answer, "source_paragraphs": paragraphs}
 
 
 @app.post("/summarise/")
 def get_summary(submission: URLSubmission):
     response = (
         sources.client.query.get(sources.target_class, sources.get_all_property_names())
-        .with_where(distyll.source_filter(submission.url))
+        .with_where(db.source_filter(submission.url))
         .with_limit(1)
         .do()
     )
-    summary = response["data"]["Get"][sources.target_class][0][distyll.COLLECTION_BODY_PROPERTY]
+    summary = response["data"]["Get"][sources.target_class][0][db.COLLECTION_BODY_PROPERTY]
     return {"summary": summary}
 
 

@@ -137,65 +137,42 @@ def download_youtube(link: str, outpath: str, audio_only: bool = True):
     return True
 
 
-def summarize_paragraph_set(paragraphs: List) -> str:
-    topic_prompt = PROMPTS.SUMMARIZE + ("=" * 10) + str(paragraphs)
-    completion = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system",
-             "content": """
-                You are a helpful assistant who can summarize information very well in
-                clear, concise language without resorting to domain-specific jargon.
-                """
-             },
-            {"role": "user", "content": topic_prompt}
-        ]
-    )
-    return completion.choices[0].message["content"]
+# def summarize_paragraph_set(paragraphs: List) -> str:
+#     topic_prompt = PROMPTS.SUMMARIZE + ("=" * 10) + str(paragraphs)
+#     completion = openai.ChatCompletion.create(
+#         model="gpt-3.5-turbo",
+#         messages=[
+#             {"role": "system",
+#              "content": """
+#                 You are a helpful assistant who can summarize information very well in
+#                 clear, concise language without resorting to domain-specific jargon.
+#                 """
+#              },
+#             {"role": "user", "content": topic_prompt}
+#         ]
+#     )
+#     return completion.choices[0].message["content"]
 
 
-def summarize_multiple_paragraphs(paragraphs: List) -> Union[str, List]:
-    """
-    Helper function for summarizing multiple paragraphs using an LLM
-    :param paragraphs:
-    :return:
-    """
-    paragraph_count = len(paragraphs)
-    if paragraph_count < MAX_N_CHUNKS:
-        print(f"Summarizing {paragraph_count} paragraphs")
-        return summarize_paragraph_set(paragraphs)
-    else:
-        print(f"{paragraph_count} paragraphs is too many - let's split them up")
-        summary_sets = (paragraph_count // MAX_N_CHUNKS) + 1
-        subsets = [
-            paragraphs[MAX_N_CHUNKS*i:MAX_N_CHUNKS*(i+1)] for i in range(summary_sets)
-        ]
-        summaries = list()
-        for i, subset in enumerate(subsets):
-            print(f"Summarizing set {i} of {len(subsets)}")
-            summaries.append(summarize_paragraph_set(subset))
-        return summarize_multiple_paragraphs(summaries)
-
-
-def ask_chatgpt(prompt: str) -> str:
-    """
-    Helper function for summarizing multiple paragraphs using an LLM
-    :param prompt:
-    :return:
-    """
-
-    completion = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system",
-             "content": """
-                You are a helpful, intelligent, AI assistant. Please answer the following question the best you can.
-                """
-             },
-            {"role": "user", "content": prompt}
-        ]
-    )
-    return completion.choices[0].message["content"]
+# def ask_chatgpt(prompt: str) -> str:
+#     """
+#     Helper function for summarizing multiple paragraphs using an LLM
+#     :param prompt:
+#     :return:
+#     """
+#
+#     completion = openai.ChatCompletion.create(
+#         model="gpt-3.5-turbo",
+#         messages=[
+#             {"role": "system",
+#              "content": """
+#                 You are a helpful, intelligent, AI assistant. Please answer the following question the best you can.
+#                 """
+#              },
+#             {"role": "user", "content": prompt}
+#         ]
+#     )
+#     return completion.choices[0].message["content"]
 
 
 # ==========

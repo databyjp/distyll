@@ -5,12 +5,14 @@ from app.main import app
 
 client = TestClient(app)
 
+
 def test_submit_url():
     # Mocking the add_to_weaviate function to always return "pending"
     with patch('app.main.add_to_weaviate', return_value="pending"):
         response = client.post("/submit/", json={"url": "https://www.youtube.com/watch?v=test"})
         assert response.status_code == 200
         assert response.json() == {"status": "URL processing started"}
+
 
 def test_ask_about_content():
     # Mocking the get_content_from_weaviate and ask_question functions

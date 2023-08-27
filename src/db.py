@@ -1,6 +1,7 @@
 from dataclasses import dataclass, fields
 from typing import Optional, Union, List, Dict
 import utils
+import rag
 from utils import MAX_N_CHUNKS, PROMPTS
 import weaviate
 from weaviate import Client
@@ -370,16 +371,26 @@ def ask_object(client: Client, source_path: str, search_string: str, question: O
     return completion.choices[0].message["content"], paragraphs
 
 
-def get_search_string_from_question(question: str) -> str:
-    answer = utils.ask_chatgpt(
-        f"""
-        What would be a suitable semantic search query string that would 
-        return relevant data to help answer the following question? 
-        Remember that semantic search works by comparing the semantic meaning 
-        of one object against another.
-        Provide the search string only, and nothing else. 
-        The question is: {question}
-        """
-    )
-    print(f"Using {answer} to retrieve paragraphs for the question: {question}")
-    return answer
+def summarize_multiple_paragraphs(paragraphs: List) -> Union[str, List]:
+    """
+    Helper function for summarizing multiple paragraphs using an LLM
+    :param paragraphs:
+    :return:
+    """
+    paragraph_count = len(paragraphs)
+    if paragraph_count < MAX_N_CHUNKS:
+        print(f"Summarizing {paragraph_count} paragraphs")
+        source_data = rag.RetrievedData(paragraphs)
+        return source_data.summarize()
+    else:
+        print(f"{paragraph_count} paragraphs is too many - let's split them up")
+        summary_sets = (paragraph_count // MAX_N_CHUNKS) + 1
+        subsets = [
+            paragraphs[MAX_N_CHUNKS*i:MAX_N_CHUNKS*(i+1)] for i in range(summary_sets)
+        ]
+        summaries = list()
+        for i, subset in enumerate(subsets):
+            print(f"Summarizing set {i} of {len(subsets)}")
+            source_data = rag.RetrievedData(paragraphs)
+            summaries.append(source_data.summarize())
+        return summarize_multiple_paragraphs(summaries)
