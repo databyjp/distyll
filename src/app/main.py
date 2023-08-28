@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
+import rag
 import db
 
 client = db.start_db()
@@ -77,7 +78,7 @@ class Question(BaseModel):
 
 
 class TextSubmission(BaseModel):
-    source: str
+    source_path: str
     text: str
 
 
@@ -99,12 +100,28 @@ def submit_pdf(submission: URLSubmission, background_tasks: BackgroundTasks):
 
 @app.post("/add_text/")
 async def submit_text(submission: TextSubmission, background_tasks: BackgroundTasks):
-    status = get_object_count(submission.source)
+    status = get_object_count(submission.source_path)
     if status:
-        return {"status": f"{submission.source} is already in the database!"}
+        return {"status": f"{submission.source_path} is already in the database!"}
     else:
-        background_tasks.add_task(add_text_to_kb, submission.text, submission.source)
+        background_tasks.add_task(add_text_to_kb, submission.text, submission.source_path)
         return {"status": "Text processing started"}
+
+
+@app.post("/study/")
+async def get_study_material(submission: TextSubmission):
+    retrieve_data = rag.RAGBase(submission.text, client)
+    glossary = retrieve_data.get_glossary()
+    revision_quiz = retrieve_data.get_revision_quiz()
+    revision_quiz_answers = retrieve_data.get_revision_quiz_answers()
+    summary = retrieve_data.summarize()
+
+    return {
+        "glossary": glossary,
+        "revision_quiz": revision_quiz,
+        "revision_quiz_answers": revision_quiz_answers,
+        "summary": summary,
+    }
 
 
 # @app.post("/ask/")

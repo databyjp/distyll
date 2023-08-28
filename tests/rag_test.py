@@ -35,6 +35,7 @@ def test_prompt_gen(source_text):
     assert source_text in test_prompts.for_summarisation()
     assert source_text in test_prompts.for_glossary()
     assert source_text in test_prompts.for_revision_quiz()
+    assert source_text in test_prompts.for_revision_quiz_answers()
     assert source_text in test_prompts.for_question_answer()
     assert source_text in test_prompts.for_search_string()
 
@@ -47,7 +48,7 @@ def test_prompt_gen(source_text):
 )
 def test_add_and_get(collection_name, data_object):
     # Set up required variables & cleanup if needed
-    retrieved_data = rag.RetrievedData(source_text=dummy_text, weaviate_client=client)
+    retrieved_data = rag.RAGBase(source_text=dummy_text, weaviate_client=client)
     uuid = retrieved_data.uuid
     if client.data_object.exists(uuid=uuid, class_name=collection_name):
         client.data_object.delete(uuid=uuid, class_name=collection_name)
@@ -82,7 +83,7 @@ def test_add_and_get(collection_name, data_object):
     ]
 )
 def test_get_or_generate(collection_name, prompt):
-    retrieved_data = rag.RetrievedData(source_text=dummy_text, weaviate_client=client)
+    retrieved_data = rag.RAGBase(source_text=dummy_text, weaviate_client=client)
 
     uuid = generate_uuid5(prompt)
     if client.data_object.exists(uuid=uuid, class_name=collection_name):
@@ -104,7 +105,7 @@ def test_get_or_generate(collection_name, prompt):
     ]
 )
 def test_basic_rag_functions(source_text):
-    retrieved_data = rag.RetrievedData(source_text=source_text, weaviate_client=client)
+    retrieved_data = rag.RAGBase(source_text=source_text, weaviate_client=client)
     for collection_name in rag.CollectionNames:
         retrieved_data.delete_existing(collection_name.value)
 
@@ -112,7 +113,8 @@ def test_basic_rag_functions(source_text):
     glossary = retrieved_data.get_glossary()
     summary = retrieved_data.summarize()
     revision_quiz = retrieved_data.get_revision_quiz()
-    for output in [glossary, summary, revision_quiz]:
+    revision_quiz_answers = retrieved_data.get_revision_quiz_answers()
+    for output in [glossary, summary, revision_quiz, revision_quiz_answers]:
         assert rag.OUTPUT_PROPERTY_NAME in output['properties'].keys()
         assert len(output['properties'][rag.OUTPUT_PROPERTY_NAME]) > 50
 

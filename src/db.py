@@ -380,7 +380,7 @@ def summarize_multiple_paragraphs(paragraphs: List) -> Union[str, List]:
     paragraph_count = len(paragraphs)
     if paragraph_count < MAX_N_CHUNKS:
         print(f"Summarizing {paragraph_count} paragraphs")
-        source_data = rag.RetrievedData(paragraphs)
+        source_data = rag.RAGBase(paragraphs)
         return source_data.summarize()
     else:
         print(f"{paragraph_count} paragraphs is too many - let's split them up")
@@ -391,6 +391,6 @@ def summarize_multiple_paragraphs(paragraphs: List) -> Union[str, List]:
         summaries = list()
         for i, subset in enumerate(subsets):
             print(f"Summarizing set {i} of {len(subsets)}")
-            source_data = rag.RetrievedData(paragraphs)
+            source_data = rag.RAGBase(paragraphs)
             summaries.append(source_data.summarize())
         return summarize_multiple_paragraphs(summaries)

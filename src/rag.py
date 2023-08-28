@@ -15,12 +15,13 @@ class CollectionNames(Enum):
     Retrieve it from this class
     """
     REVISION_QUIZ = 'RevisionQuiz'
+    REVISION_QUIZ_ANSWERS = 'RevisionQuizAnswers'
     GLOSSARY = 'Glossary'
     SUMMARY = 'Summary'
 
 
 class PromptGenerator:
-    def __init__(self, source_text: Union[List[str], str], optional_prompt: str = ""):
+    def __init__(self, source_text: Union[List[str], str]):
         """
         Initialize prompt generation
         :param source_text:
@@ -30,7 +31,6 @@ class PromptGenerator:
             self.source_text = ' '.join(source_text)
         else:
             self.source_text = source_text
-        self.optional_prompt = optional_prompt
 
     def for_revision_quiz(self):
         task_prompt = f"""
@@ -55,6 +55,31 @@ class PromptGenerator:
         {self.source_text}
 
         ======= Questions =======
+
+        """
+        return task_prompt
+
+    def for_revision_quiz_answers(self, quiz_questions):
+        task_prompt = f"""
+        Return the correct answers to all of the following quiz questions, based on the source text
+        Each answer should be in the following Markdown format
+
+        - QUESTION 1: 
+            - Answer: 
+            - Reason: Explain why
+            - Source: Quote the minimum relevant source text
+        - QUESTION 2:
+        ...
+
+        ====== Quiz Questions =======
+
+        {quiz_questions}
+
+        ====== Source text =======
+
+        {self.source_text}
+
+        ====== Answers =======
 
         """
         return task_prompt
@@ -107,13 +132,13 @@ class PromptGenerator:
         """
         return task_prompt
 
-    def for_question_answer(self):
+    def for_question_answer(self, question):
         task_prompt = f"""
         Answer this question based on the following text. The question is:
         
         ===== QUESTION ======
         
-        {self.optional_prompt}
+        {question}
          
         ===== END QUESTION ======
         
@@ -132,7 +157,7 @@ class PromptGenerator:
         return task_prompt
 
 
-class RetrievedData:
+class RAGBase:
     def __init__(
             self,
             source_text: Union[List[str], str],
@@ -201,6 +226,14 @@ class RetrievedData:
         return self.get_or_generate(
             collection_name=collection_name,
             prompt=self.prompts.for_revision_quiz(),
+        )
+
+    def get_revision_quiz_answers(self):
+        collection_name = CollectionNames.REVISION_QUIZ_ANSWERS.value
+        quiz_questions = self.get_revision_quiz()
+        return self.get_or_generate(
+            collection_name=collection_name,
+            prompt=self.prompts.for_revision_quiz_answers(quiz_questions=quiz_questions),
         )
 
     def get_glossary(self):
