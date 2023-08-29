@@ -1,60 +1,188 @@
+import db
 import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import patch
-from app.main import app
 
-client = TestClient(app)
+import preprocessing
 
 
-def test_submit_url():
-    # Mocking the add_to_weaviate function to always return "pending"
-    with patch('app.main.add_to_weaviate', return_value="pending"):
-        response = client.post("/submit/", json={"url": "https://www.youtube.com/watch?v=test"})
-        assert response.status_code == 200
-        assert response.json() == {"status": "URL processing started"}
+# TODO - add connection to test instance to allow deletion
 
 
-def test_ask_about_content():
-    # Mocking the get_content_from_weaviate and ask_question functions
-    with patch('app.main.get_content_from_weaviate', return_value="mocked content"):
-        with patch('app.main.ask_question', return_value="mocked answer"):
-            response = client.post("/ask/", json={"url": "https://www.youtube.com/watch?v=test", "question": "What's the video about?"})
-            assert response.status_code == 200
-            assert response.json() == {"content": "mocked content", "answer": "mocked answer"}
+def test_instantiation():
+    client = db.connect_weaviate()
+    assert client.is_ready() is True
 
 
+@pytest.mark.parametrize(
+    "collection_config",
+    [
+        {'class': 'TestCollectionA'}
+    ]
+)
+def test_class_addition(collection_config):
+    # Connect to Weaviate
+    client = db.connect_weaviate()
 
-# import utils
-# import wkb
+    # Prep
+    collection_name = collection_config['class']
+    client.schema.delete_class(collection_name)
 
+    # Add new class
+    response = db.add_class_if_not_present(client, collection_config)
+    assert response is True  # Should be True if newly added
+    response = db.add_class_if_not_present(client, collection_config)
+    assert response is None  # Should be None if it exists
 
-# @pytest.mark.parametrize(
-#     ("length", "expected_output"),
-#     [
-#         (0, 1),
-#         (100, 1),
-#         (1000, 1),
-#         (1999, 2),
-#         (11999, 12),
-#     ],
-# )
-# def test_chunker(length, expected_output):
-#     test_str = "s " * length
-#     # TODO - add " s " to test case once regex splitting added for multiple whitespaces
-#     assert len(utils.chunk_text(test_str)) == expected_output
-
-
-# def test_load_txt_file():
-#     loaded_text = utils.load_txt_file()
-#     assert type(loaded_text) == str
-#     assert "kubernetes" in loaded_text
+    # Clean up
+    client.schema.delete_class(collection_name)
 
 
-# def test_build_weaviate_object():
-#     chunk = "this text"
-#     test_dict = {
-#         "source_location": "https://weaviate.io",
-#     }
-#     new_dict = {k: v for k, v in test_dict.items()}
-#     new_dict["body"] = chunk
-#     assert wkb.build_weaviate_object(chunk, test_dict) == new_dict
+def test_start_db():
+    # Connect to Weaviate
+    client = db.connect_weaviate()  # TODO - replace this with test client
+
+    # Prep
+    for c in db.DEFAULT_CLASSES["classes"]:
+        client.schema.delete_class(c["class"])
+        assert not client.schema.exists(c["class"])
+
+    # Check that it has added classes
+    db.start_db(custom_client=client)
+    for c in db.DEFAULT_CLASSES["classes"]:
+        assert client.schema.exists(c["class"])
+
+    # Cleanup
+    for c in db.DEFAULT_CLASSES["classes"]:
+        client.schema.delete_class(c["class"])
+        assert not client.schema.exists(c["class"])
+
+
+@pytest.mark.parametrize(
+    "collection_name",
+    [
+        'TestCollectionA'
+    ]
+)
+def test_collection_instantiation(collection_name):
+    # Connect to Weaviate
+    client = db.connect_weaviate()  # TODO - replace this with test client
+    client.schema.delete_class(collection_name)
+
+    # Instantiate a collection
+    collection = db.Collection(client=client, collection_name=collection_name)
+    assert collection.collection_name == collection_name
+    assert collection.client == client
+    client.schema.delete_class(collection_name)
+
+
+@pytest.mark.parametrize(
+    "wv_object, collection_name",
+    [
+        ({"name": "value"}, "TestCollectionA")
+    ]
+)
+def test_add_object(wv_object, collection_name):
+    # Connect to Weaviate
+    client = db.connect_weaviate()  # TODO - replace this with test client
+
+    # Instantiate a collection
+    if client.schema.exists(collection_name):
+        client.schema.delete_class(collection_name)
+    collection = db.Collection(client=client, collection_name=collection_name)
+
+    # Tests
+    response = collection.add_object(wv_object)
+    assert response is True
+    response = client.query.aggregate(collection_name).with_meta_count().do()
+    assert response["data"]["Aggregate"][collection_name][0]["meta"]["count"] == 1
+    response = collection.add_object(wv_object)
+    assert response is None
+    response = client.query.aggregate(collection_name).with_meta_count().do()
+    assert response["data"]["Aggregate"][collection_name][0]["meta"]["count"] == 1
+    collection.add_object({"test": "AnotherObject"})
+    response = client.query.aggregate(collection_name).with_meta_count().do()
+    assert response["data"]["Aggregate"][collection_name][0]["meta"]["count"] == 2
+    client.schema.delete_class(collection_name)
+
+
+@pytest.mark.parametrize(
+    "n_chunks, source_object_data, collection_name",
+    [
+        (1, db.SourceData(path="youTube", body="Why, hello there"), "TestCollectionA"),
+        (10, db.SourceData(path="youTube", body="Why, hello there"), "TestCollectionA"),
+    ]
+)
+def test_add_chunks(n_chunks, source_object_data, collection_name):
+    chunks = ["A" * (i+1) for i in range(n_chunks)]
+
+    # Connect to Weaviate
+    client = db.connect_weaviate()  # TODO - replace this with test client
+
+    # Instantiate a collection
+    if client.schema.exists(collection_name):
+        client.schema.delete_class(collection_name)
+    collection = db.Collection(client=client, collection_name=collection_name)
+
+    # Tests
+    collection.import_chunks(chunks, source_object_data)
+    response = client.query.aggregate(collection_name).with_meta_count().do()
+    assert response["data"]["Aggregate"][collection_name][0]["meta"]["count"] == n_chunks
+    client.schema.delete_class(collection_name)
+
+
+@pytest.mark.parametrize(
+    "n_chunks, collection_name, chunk_number_offset",
+    [
+        (1, "TestCollectionA", 0),
+        (5, "TestCollectionA", 0),
+    ]
+)
+def test_add_data(n_chunks, collection_name, chunk_number_offset):
+    source_object_data = db.SourceData(
+        path="youTube",
+        body="A" * preprocessing.MAX_CHUNK_CHARS * n_chunks
+    )
+
+    # Connect to Weaviate
+    client = db.connect_weaviate()  # TODO - replace this with test client
+
+    # Instantiate a collection
+    if client.schema.exists(collection_name):
+        client.schema.delete_class(collection_name)
+    collection = db.Collection(client=client, collection_name=collection_name)
+
+    # Tests
+    collection.add_data(source_object_data, chunk_number_offset=chunk_number_offset)
+    response = client.query.aggregate(collection_name).with_meta_count().do()
+    assert response["data"]["Aggregate"][collection_name][0]["meta"]["count"] == n_chunks + 1
+    client.schema.delete_class(collection_name)
+    # TODO - add test for offset
+
+
+@pytest.mark.parametrize(
+    "source_path, n_chunks, chunk_number_offset, source_title, collection_name",
+    [
+        ("YouTube", 1, 0, "YouTubeVideo", "TestCollectionA"),
+        ("YouTube", 5, 0, "YouTubeVideo", "TestCollectionA"),
+    ]
+)
+def test_add_text(source_path, n_chunks, chunk_number_offset, source_title, collection_name):
+    # Connect to Weaviate
+    client = db.connect_weaviate()  # TODO - replace this with test client
+
+    # Instantiate a collection
+    if client.schema.exists(collection_name):
+        client.schema.delete_class(collection_name)
+    collection = db.Collection(client=client, collection_name=collection_name)
+
+    # Tests
+    source_text = "A" * preprocessing.MAX_CHUNK_CHARS * n_chunks
+    collection.add_text(
+        source_path=source_path,
+        source_text=source_text,
+        source_title=source_title,
+        chunk_number_offset=chunk_number_offset
+    )
+    response = client.query.aggregate(collection_name).with_meta_count().do()
+    assert response["data"]["Aggregate"][collection_name][0]["meta"]["count"] == n_chunks + 1
+    client.schema.delete_class(collection_name)
+    # TODO - add test for offset

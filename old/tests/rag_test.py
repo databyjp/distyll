@@ -2,7 +2,7 @@ import weaviate
 from weaviate.util import generate_uuid5
 import pytest
 import os
-import rag
+from old import rag
 
 client = weaviate.Client(
     embedded_options=weaviate.EmbeddedOptions(),
