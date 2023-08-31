@@ -12,7 +12,7 @@ import prompts
 
 openai.api_key = os.environ["OPENAI_APIKEY"]
 
-MAX_CONTEXT_SIZE = 7500  # Max context size in characters
+MAX_CONTEXT_SIZE = 5000  # Max context size in characters
 MAX_N_CHUNKS = preprocessing.MAX_CHUNK_CHARS   # Max number of chunks to grab in a set of results
 
 
@@ -77,39 +77,7 @@ class RAGBase:
             rag_base_summaries = RAGBase(summaries)
             return rag_base_summaries.summarize()
         else:
-            prompt = prompts.summarize(self.source_text)
-            return self.generate(prompt)
-
-
-def get_summary(source_text: str):
-    rag_base = RAGBase(source_text)
-    prompt = prompts.summarize(source_text)
-    return rag_base.generate(prompt)
-
-
-def summarize_multiple_paragraphs(paragraphs: List) -> Union[str, List]:
-    """
-    Helper function for summarizing multiple paragraphs using an LLM
-    :param paragraphs:
-    :return:
-    """
-    paragraph_count = len(paragraphs)
-    if paragraph_count < MAX_N_CHUNKS:
-        print(f"Summarizing {paragraph_count} paragraphs")
-        source_data = RAGBase(paragraphs)
-        return source_data.summarize()
-    else:
-        print(f"{paragraph_count} paragraphs is too many - let's split them up")
-        summary_sets = (paragraph_count // MAX_N_CHUNKS) + 1
-        subsets = [
-            paragraphs[MAX_N_CHUNKS*i:MAX_N_CHUNKS*(i+1)] for i in range(summary_sets)
-        ]
-        summaries = list()
-        for i, subset in enumerate(subsets):
-            print(f"Summarizing set {i} of {len(subsets)}")
-            source_data = RAGBase(paragraphs)
-            summaries.append(source_data.summarize())
-        return summarize_multiple_paragraphs(summaries)
+            return self.summarize_short()
 
 
 def call_llm(prompt: str, use_expensive_model: bool = False) -> str:

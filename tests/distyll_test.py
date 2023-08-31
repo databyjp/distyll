@@ -39,6 +39,9 @@ def test_class_addition(client, collection_config):
     client.schema.delete_class(collection_name)
 
 
+# TODO - add tests for get_all_property_names
+
+
 def test_collection_instantiation(client, testclasses):
     source_class, chunk_class = testclasses
 
@@ -52,6 +55,7 @@ def test_collection_instantiation(client, testclasses):
     for c in [source_class, chunk_class]:
         assert client.schema.exists(c)
     assert collection.client == client
+    # TODO - add tests for collection properties
 
     for c in [source_class, chunk_class]:
         client.schema.delete_class(c)
@@ -146,6 +150,9 @@ def test_add_data(client, n_chunks, testclasses, chunk_number_offset):
     assert response["data"]["Aggregate"][chunk_class][0]["meta"]["count"] == n_chunks + 1
     client.schema.delete_class(chunk_class)
     # TODO - add test for offset
+    # TODO - add test to check:
+    #  - if the source object was added as well as chunks
+    #  - check UUID
 
 
 @pytest.mark.parametrize(

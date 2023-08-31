@@ -105,6 +105,17 @@ def add_class_if_not_present(client: Client, collection_config: Dict) -> Union[b
         return None
 
 
+def get_all_property_names(client, collection_name) -> List[str]:
+    """
+    Get property names from the Weaviate collection
+    :param client:
+    :param collection_name:
+    :return:
+    """
+    class_schema = client.schema.get(collection_name)
+    return [p["name"] for p in class_schema["properties"]]
+
+
 # ===========================================================================
 # DB operations
 # ===========================================================================
@@ -138,6 +149,8 @@ class DBConnection:
 
         self.source_class = source_class
         self.chunk_class = chunk_class
+        self.chunk_properties = get_all_property_names(self.client, self.chunk_class)
+        self.source_properties = get_all_property_names(self.client, self.source_properties)
 
     def _add_object(self, data_object, collection_name):
         """
@@ -192,17 +205,18 @@ class DBConnection:
         :param chunk_number_offset: Any offset to chunk number
         :return:
         """
+        # Add chunks
         chunks = preprocessing.chunk_text(source_object_data.body)
-        # TODO - add source object import
-        """
-        Pseudocode
-        - Summarize source_object_data.body into an appropriate size
-        - Save to CollectionName.SUMMARY.value as 'summary' 
-        """
         counter = self.import_chunks(chunks, source_object_data, chunk_number_offset)
-        data_obj = asdict(source_object_data)
-        summary = rag.get_summary()
-        data_obj['summary'] = summary
+
+        # Generate a summary and add the source object with it
+        # Generate summary
+        rag_base = rag.RAGBase(source_object_data.body)
+        summary = rag_base.summarize()
+        source_obj = asdict(source_object_data)
+        # Add the source object with summary
+        source_obj['summary'] = summary
+        self._add_object(source_obj, self.source_class)
 
         return counter
 
