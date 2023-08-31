@@ -72,7 +72,6 @@ notebook_shim==0.2.3
 openai==0.27.8
 orjson==3.9.5
 overrides==7.3.1
--e git+ssh://git@github.com/databyjp/knowledge_space.git@80f0b200a3fc77cb425dd809a2bc29402e1bb2b3#egg=package_name
 packaging==23.1
 pandocfilters==1.5.0
 parso==0.8.3

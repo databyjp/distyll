@@ -3,12 +3,16 @@ from enum import Enum
 from typing import Optional, Union, Dict, List
 import weaviate
 from weaviate import Client
+from weaviate.util import generate_uuid5
 import openai
 import os
-
-from weaviate.util import generate_uuid5
+from pathlib import Path
 
 import preprocessing
+import media
+import logging
+
+logger = logging.getLogger(__name__)
 
 openai.api_key = os.environ["OPENAI_APIKEY"]
 
@@ -19,10 +23,13 @@ DEFAULT_CLASS_CONFIG = {
     },
 }
 
+TEMPDIR = Path("tempdata")
+TEMPDIR.mkdir(exist_ok=True)
+
 
 class CollectionName(Enum):
     CHUNK: str = "DataChunk"
-    SOURCE: str = "DatSource"
+    SOURCE: str = "DataSource"
 
 
 @dataclass
@@ -40,7 +47,7 @@ class ChunkData:
     chunk_number: int
 
 
-def create_class_obj(collection_name, properties):
+def create_class_definition(collection_name, properties):
     """
     Create a object for a particular class
     :param collection_name:
@@ -56,7 +63,7 @@ def create_class_obj(collection_name, properties):
 
 DEFAULT_CLASSES = {
     "classes": [
-        create_class_obj(
+        create_class_definition(
             CollectionName.CHUNK.value,
             [{"name": field.name, "dataType": ["text"]} for field in fields(ChunkData)]
         ),
@@ -99,11 +106,11 @@ def add_class_if_not_present(client: Client, collection_config: Dict) -> Union[b
     :return:
     """
     if not client.schema.exists(collection_config['class']):
-        print(f"Creating a new class: {collection_config['class']}")
+        logger.info(f"Creating a new class: {collection_config['class']}")
         client.schema.create_class(collection_config)
         return True
     else:
-        print(f"Found {collection_config['class']} in the schema. Skipping class creation")
+        logger.info(f"Found {collection_config['class']} in the schema. Skipping class creation")
         return None
 
 
@@ -222,27 +229,27 @@ class Collection:
     #         source_title=pdf_url
     #     )
     #
-    # def add_from_youtube(self, youtube_url: str) -> int:
-    #     """
-    #     Add the transcript of a YouTube video to Weaviate
-    #     :param youtube_url:
-    #     :return:
-    #     """
-    #     # Grab the YouTube Video & convert to transcript text
-    #     tmp_outpath = 'temp_audio.mp3'
-    #     utils.download_audio(youtube_url, tmp_outpath)
-    #     transcript_texts = utils._get_transcripts_from_audio_file(tmp_outpath)
-    #
-    #     # Ingest transcripts into the database
-    #     obj_count = 0
-    #     for transcript_text in transcript_texts:
-    #         obj_count += self.add_text(
-    #             source_path=youtube_url, source_text=transcript_text,
-    #             chunk_number_offset=obj_count, source_title=utils.get_youtube_title(youtube_url)
-    #         )
-    #
-    #     # Cleanup - if original file still exists
-    #     if os.path.exists(tmp_outpath):
-    #         os.remove(tmp_outpath)
-    #
-    #     return obj_count
+    def add_from_youtube(self, youtube_url: str) -> int:
+        """
+        Add the transcript of a YouTube video to Weaviate
+        :param youtube_url:
+        :return:
+        """
+        # Grab the YouTube Video & convert to transcript text
+        tmp_outpath = TEMPDIR/'temp_audio.mp3'
+        video_title = media.download_youtube(youtube_url=youtube_url, path_out=tmp_outpath)
+        transcript_texts = media.get_transcripts_from_audio_file(tmp_outpath)
+
+        # Ingest transcripts into the database
+        obj_count = 0
+        for transcript_text in transcript_texts:
+            obj_count += self.add_text(
+                source_path=youtube_url, source_text=transcript_text,
+                chunk_number_offset=obj_count, source_title=video_title
+            )
+
+        # Cleanup - if original file still exists
+        if os.path.exists(tmp_outpath):
+            os.remove(tmp_outpath)
+
+        return obj_count
