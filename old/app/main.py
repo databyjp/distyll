@@ -4,8 +4,8 @@ from old import rag
 import db
 
 client = db.start_db()
-chunks = db.DistylledData(client, db.COLLECTION_NAME_CHUNKS)
-sources = db.DistylledData(client, db.COLLECTION_NAME_SOURCES)
+chunks = db.DBConnection(client, db.COLLECTION_NAME_CHUNKS)
+sources = db.DBConnection(client, db.COLLECTION_NAME_SOURCES)
 
 app = FastAPI(
     title="distyll.info",

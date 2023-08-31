@@ -107,14 +107,16 @@ def add_class_if_not_present(client: Client, collection_config: Dict) -> Union[b
 # ===========================================================================
 # Collection
 # ===========================================================================
-class DistylledData:
+class DBConnection:
 
     def __init__(
             self,
-            client: Client,
+            client: Union[Client, None] = None,
             source_class: str = CollectionName.SOURCE.value,
             chunk_class: str = CollectionName.CHUNK.value
     ):
+        if client is None:
+            client = connect_weaviate()
         self.client = client
 
         DB_CLASSES = {

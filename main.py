@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO,
 
 
 def main():
-    client = db.connect_weaviate()
+    dbdata = db.DBConnection()
     pass
 
 

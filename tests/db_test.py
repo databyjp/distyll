@@ -1,17 +1,20 @@
 from dataclasses import fields
-from pathlib import Path
-
-import db
 import pytest
-
+import db
 import preprocessing
 
 
-# TODO - add connection to test instance to allow deletion
+@pytest.fixture(scope="session")
+def client():
+    return db.connect_weaviate()
 
 
-def test_instantiation():
-    client = db.connect_weaviate()
+@pytest.fixture(scope="session")
+def testclasses():
+    return 'TestSource', 'TestChunk'
+
+
+def test_instantiation(client):
     assert client.is_ready() is True
 
 
@@ -21,10 +24,7 @@ def test_instantiation():
         {'class': 'TestCollectionA'}
     ]
 )
-def test_class_addition(collection_config):
-    # Connect to Weaviate
-    client = db.connect_weaviate()
-
+def test_class_addition(client, collection_config):
     # Prep
     collection_name = collection_config['class']
     client.schema.delete_class(collection_name)
@@ -39,41 +39,16 @@ def test_class_addition(collection_config):
     client.schema.delete_class(collection_name)
 
 
-# def test_start_db():
-#     # Connect to Weaviate
-#     client = db.connect_weaviate()  # TODO - replace this with test client
-#
-#     # Prep
-#     for c in db.DEFAULT_CLASSES["classes"]:
-#         client.schema.delete_class(c["class"])
-#         assert not client.schema.exists(c["class"])
-#
-#     # Check that it has added classes
-#     db.start_db(custom_client=client)
-#     for c in db.DEFAULT_CLASSES["classes"]:
-#         assert client.schema.exists(c["class"])
-#
-#     # Cleanup
-#     for c in db.DEFAULT_CLASSES["classes"]:
-#         client.schema.delete_class(c["class"])
-#         assert not client.schema.exists(c["class"])
+def test_collection_instantiation(client, testclasses):
+    source_class, chunk_class = testclasses
 
-
-@pytest.mark.parametrize(
-    "source_class, chunk_class",
-    [
-        ('TestSource', 'TestChunk')
-    ]
-)
-def test_collection_instantiation(source_class: str, chunk_class: str):
     # Connect to Weaviate
-    client = db.connect_weaviate()  # TODO - replace this with test client
     for c in [source_class, chunk_class]:
         if client.schema.exists(c):
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DistylledData(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
     for c in [source_class, chunk_class]:
         assert client.schema.exists(c)
     assert collection.client == client
@@ -83,21 +58,21 @@ def test_collection_instantiation(source_class: str, chunk_class: str):
 
 
 @pytest.mark.parametrize(
-    "wv_object, source_class, chunk_class",
+    "wv_object",
     [
-        ({"name": "value"}, 'TestSource', 'TestChunk')
+        ({"name": "value"})
     ]
 )
-def test_add_object(wv_object, source_class, chunk_class):
-    # Connect to Weaviate
-    client = db.connect_weaviate()  # TODO - replace this with test client
+def test_add_object(client, wv_object, testclasses):
+    source_class, chunk_class = testclasses
 
+    # Connect to Weaviate
     for c in [source_class, chunk_class]:
         if client.schema.exists(c):
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DistylledData(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
 
     # Tests
     for c in [source_class, chunk_class]:
@@ -118,24 +93,23 @@ def test_add_object(wv_object, source_class, chunk_class):
 
 
 @pytest.mark.parametrize(
-    "n_chunks, source_object_data, source_class, chunk_class",
+    "n_chunks, source_object_data",
     [
-        (1, db.SourceData(path="youTube", body="Why, hello there"), 'TestSource', 'TestChunk'),
-        (10, db.SourceData(path="youTube", body="Why, hello there"), 'TestSource', 'TestChunk'),
+        (1, db.SourceData(path="youTube", body="Why, hello there")),
+        (10, db.SourceData(path="youTube", body="Why, hello there")),
     ]
 )
-def test_add_chunks(n_chunks, source_object_data, source_class, chunk_class):
+def test_add_chunks(client, n_chunks, source_object_data, testclasses):
+    source_class, chunk_class = testclasses
     chunks = ["A" * (i+1) for i in range(n_chunks)]
 
     # Connect to Weaviate
-    client = db.connect_weaviate()  # TODO - replace this with test client
-
     for c in [source_class, chunk_class]:
         if client.schema.exists(c):
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DistylledData(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
 
     # Tests
     collection.import_chunks(chunks, source_object_data)
@@ -145,27 +119,26 @@ def test_add_chunks(n_chunks, source_object_data, source_class, chunk_class):
 
 
 @pytest.mark.parametrize(
-    "n_chunks, source_class, chunk_class, chunk_number_offset",
+    "n_chunks, chunk_number_offset",
     [
-        (1, 'TestSource', 'TestChunk', 0),
-        (5, 'TestSource', 'TestChunk', 0),
+        (1, 0),
+        (5, 0),
     ]
 )
-def test_add_data(n_chunks, source_class, chunk_class, chunk_number_offset):
+def test_add_data(client, n_chunks, testclasses, chunk_number_offset):
+    source_class, chunk_class = testclasses
     source_object_data = db.SourceData(
         path="youTube",
         body="A" * preprocessing.MAX_CHUNK_CHARS * n_chunks
     )
 
     # Connect to Weaviate
-    client = db.connect_weaviate()  # TODO - replace this with test client
-
     for c in [source_class, chunk_class]:
         if client.schema.exists(c):
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DistylledData(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
 
     # Tests
     collection.add_data(source_object_data, chunk_number_offset=chunk_number_offset)
@@ -176,13 +149,15 @@ def test_add_data(n_chunks, source_class, chunk_class, chunk_number_offset):
 
 
 @pytest.mark.parametrize(
-    "source_path, n_chunks, chunk_number_offset, source_title, source_class, chunk_class",
+    "source_path, n_chunks, chunk_number_offset, source_title",
     [
-        ("YouTube", 1, 0, "YouTubeVideo", 'TestSource', 'TestChunk'),
-        ("YouTube", 5, 0, "YouTubeVideo", 'TestSource', 'TestChunk'),
+        ("YouTube", 1, 0, "YouTubeVideo"),
+        ("YouTube", 5, 0, "YouTubeVideo"),
     ]
 )
-def test_add_text(source_path, n_chunks, chunk_number_offset, source_title, source_class, chunk_class):
+def test_add_text(client, source_path, n_chunks, chunk_number_offset, source_title, testclasses):
+    source_class, chunk_class = testclasses
+
     # Connect to Weaviate
     client = db.connect_weaviate()  # TODO - replace this with test client
 
@@ -191,7 +166,7 @@ def test_add_text(source_path, n_chunks, chunk_number_offset, source_title, sour
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DistylledData(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
 
     # Tests
     source_text = "A" * preprocessing.MAX_CHUNK_CHARS * n_chunks
@@ -208,21 +183,20 @@ def test_add_text(source_path, n_chunks, chunk_number_offset, source_title, sour
 
 
 @pytest.mark.parametrize(
-    "youtube_url, source_class, chunk_class",
+    "youtube_url",
     [
-        ("https://youtu.be/ni3T4vStzBI", 'TestSource', 'TestChunk')
+        "https://youtu.be/ni3T4vStzBI"
     ]
 )
-def test_add_from_youtube(youtube_url, source_class, chunk_class):
+def test_add_from_youtube(client, youtube_url, testclasses):
+    source_class, chunk_class = testclasses
     # Connect to Weaviate
-    client = db.connect_weaviate()  # TODO - replace this with test client
-
     for c in [source_class, chunk_class]:
         if client.schema.exists(c):
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DistylledData(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
 
     # Tests
     collection.add_from_youtube(youtube_url)

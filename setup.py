@@ -1,7 +1,6 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="package_name",
-    packages=find_packages(where="src"),
-    package_dir={"": "src"},
+    name="distyll_info",
+    packages=find_packages()
 )
