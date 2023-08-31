@@ -61,18 +61,12 @@ def create_class_definition(collection_name, properties):
     }
 
 
-DEFAULT_CLASSES = {
-    "classes": [
-        create_class_definition(
-            CollectionName.CHUNK.value,
-            [{"name": field.name, "dataType": ["text"]} for field in fields(ChunkData)]
-        ),
-        # create_class_obj(
-        #     CollectionName.SOURCE.value,
-        #     [{"name": field, "dataType": ["text"]} for field in fields(SourceData)]
-        # ),
-    ]
-}
+chunk_props = list()
+for field in fields(ChunkData):
+    if field.type == int:
+        chunk_props.append({"name": field.name, "dataType": ["int"]})
+    else:
+        chunk_props.append({"name": field.name, "dataType": ["text"]})
 
 
 # ===========================================================================
@@ -110,45 +104,52 @@ def add_class_if_not_present(client: Client, collection_config: Dict) -> Union[b
         return None
 
 
-def start_db(version: str = "latest", custom_client: Client = None) -> Client:
-    """
-    Instantiate this knowledge database & return the client object
-    :param version: Version for pulling in specific versions (with Embedded Weaviate instantiation)
-    :param custom_client: Pass on a custom client for use
-    :return:
-    """
-    if not custom_client:
-        client = connect_weaviate(version)
-    else:
-        client = custom_client
-
-    for c in DEFAULT_CLASSES["classes"]:
-        add_class_if_not_present(client, c)
-    return client
-
-
 # ===========================================================================
 # Collection
 # ===========================================================================
-class Collection:
+class DistylledData:
 
-    def __init__(self, client: Client, collection_name: str):
+    def __init__(
+            self,
+            client: Client,
+            source_class: str = CollectionName.SOURCE.value,
+            chunk_class: str = CollectionName.CHUNK.value
+    ):
         self.client = client
-        self.collection_name = collection_name
 
-    def add_object(self, data_object):
+        DB_CLASSES = {
+            "classes": [
+                create_class_definition(
+                    source_class,
+                    [{"name": field.name, "dataType": ["text"]} for field in fields(SourceData)]
+                ),
+                create_class_definition(
+                    chunk_class,
+                    chunk_props
+                ),
+            ]
+        }
+
+        for c in DB_CLASSES["classes"]:
+            add_class_if_not_present(client, c)
+
+        self.source_class = source_class
+        self.chunk_class = chunk_class
+
+    def _add_object(self, data_object, collection_name):
         """
         Add an object to the collection
         :param data_object:
+        :param collection_name:
         :return:
         """
         uuid = generate_uuid5(data_object)
-        if self.client.data_object.exists(uuid=uuid, class_name=self.collection_name):
+        if self.client.data_object.exists(uuid=uuid, class_name=collection_name):
             return None
         else:
             self.client.data_object.create(
                 data_object=data_object,
-                class_name=self.collection_name,
+                class_name=collection_name,
                 uuid=generate_uuid5(data_object)
             )
             return True
@@ -172,7 +173,7 @@ class Collection:
                     chunk_number=i+chunk_number_offset
                 )
                 batch.add_data_object(
-                    class_name=self.collection_name,
+                    class_name=self.chunk_class,
                     data_object=asdict(chunk_object),
                     uuid=generate_uuid5(asdict(chunk_object))
                 )
@@ -189,6 +190,7 @@ class Collection:
         :return:
         """
         chunks = preprocessing.chunk_text(source_object_data.body)
+        # TODO - add source object import
         counter = self.import_chunks(chunks, source_object_data, chunk_number_offset)
 
         return counter
@@ -212,19 +214,6 @@ class Collection:
         )
         return self.add_data(source_object_data, chunk_number_offset=chunk_number_offset)
 
-    # def add_pdf(self, pdf_url: str) -> int:
-    #     """
-    #     Add a PDF to the database
-    #     :param pdf_url:
-    #     :return:
-    #     """
-    #     text_content = utils.download_and_parse_pdf(pdf_url)
-    #     return self.add_text(
-    #         source_path=pdf_url,
-    #         source_text=text_content,
-    #         source_title=pdf_url
-    #     )
-    #
     def add_from_youtube(self, youtube_url: str) -> int:
         """
         Add the transcript of a YouTube video to Weaviate
@@ -249,3 +238,17 @@ class Collection:
             os.remove(tmp_outpath)
 
         return obj_count
+
+    # def add_pdf(self, pdf_url: str) -> int:
+    #     """
+    #     Add a PDF to the database
+    #     :param pdf_url:
+    #     :return:
+    #     """
+    #     text_content = utils.download_and_parse_pdf(pdf_url)
+    #     return self.add_text(
+    #         source_path=pdf_url,
+    #         source_text=text_content,
+    #         source_title=pdf_url
+    #     )
+    #
