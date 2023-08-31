@@ -87,12 +87,8 @@ def connect_weaviate(version: str = "latest") -> Client:
     from weaviate import EmbeddedOptions
 
     # Replace this with other client instantiation method to connect to another instance of Weaviate
-    # client = weaviate.Client(
-    #     embedded_options=EmbeddedOptions(version=version),
-    # )
     client = weaviate.Client(
-        url="https://lhy7sdrnq0uvf7tgjrgnkw.c0.europe-west2.gcp.weaviate.cloud",
-        auth_client_secret=weaviate.AuthApiKey("1pskgLEtNltz0xjvP2Dw8lZA48Oi17E3YpUC")
+        embedded_options=EmbeddedOptions(version=version),
     )
 
     return client
