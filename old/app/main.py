@@ -1,7 +1,7 @@
 from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
 from old import rag
-import db
+import distyll
 
 client = db.start_db()
 chunks = db.DBConnection(client, db.COLLECTION_NAME_CHUNKS)

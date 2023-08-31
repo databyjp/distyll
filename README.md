@@ -9,6 +9,7 @@
 - Create a virtual environment
 - Activate the virtual environment
 - Run `pip install -r requirements.txt`
+    - You may need to install `ffmpeg` for your system for the audio parsing to work
 - Run the demo notebook
 
 #### Notes

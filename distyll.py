@@ -81,6 +81,7 @@ def connect_weaviate(version: str = "latest") -> Client:
     from weaviate import EmbeddedOptions
 
     # Replace this with other client instantiation method to connect to another instance of Weaviate
+    # TODO - add option to add test client
     client = weaviate.Client(
         embedded_options=EmbeddedOptions(version=version),
     )
@@ -105,7 +106,7 @@ def add_class_if_not_present(client: Client, collection_config: Dict) -> Union[b
 
 
 # ===========================================================================
-# Collection
+# DB operations
 # ===========================================================================
 class DBConnection:
 

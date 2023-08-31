@@ -1,12 +1,12 @@
 from dataclasses import fields
 import pytest
-import db
+import distyll
 import preprocessing
 
 
 @pytest.fixture(scope="session")
 def client():
-    return db.connect_weaviate()
+    return distyll.connect_weaviate()
 
 
 @pytest.fixture(scope="session")
@@ -30,9 +30,9 @@ def test_class_addition(client, collection_config):
     client.schema.delete_class(collection_name)
 
     # Add new class
-    response = db.add_class_if_not_present(client, collection_config)
+    response = distyll.add_class_if_not_present(client, collection_config)
     assert response is True  # Should be True if newly added
-    response = db.add_class_if_not_present(client, collection_config)
+    response = distyll.add_class_if_not_present(client, collection_config)
     assert response is None  # Should be None if it exists
 
     # Clean up
@@ -48,7 +48,7 @@ def test_collection_instantiation(client, testclasses):
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = distyll.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
     for c in [source_class, chunk_class]:
         assert client.schema.exists(c)
     assert collection.client == client
@@ -72,7 +72,7 @@ def test_add_object(client, wv_object, testclasses):
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = distyll.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
 
     # Tests
     for c in [source_class, chunk_class]:
@@ -95,8 +95,8 @@ def test_add_object(client, wv_object, testclasses):
 @pytest.mark.parametrize(
     "n_chunks, source_object_data",
     [
-        (1, db.SourceData(path="youTube", body="Why, hello there")),
-        (10, db.SourceData(path="youTube", body="Why, hello there")),
+        (1, distyll.SourceData(path="youTube", body="Why, hello there")),
+        (10, distyll.SourceData(path="youTube", body="Why, hello there")),
     ]
 )
 def test_add_chunks(client, n_chunks, source_object_data, testclasses):
@@ -109,7 +109,7 @@ def test_add_chunks(client, n_chunks, source_object_data, testclasses):
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = distyll.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
 
     # Tests
     collection.import_chunks(chunks, source_object_data)
@@ -127,7 +127,7 @@ def test_add_chunks(client, n_chunks, source_object_data, testclasses):
 )
 def test_add_data(client, n_chunks, testclasses, chunk_number_offset):
     source_class, chunk_class = testclasses
-    source_object_data = db.SourceData(
+    source_object_data = distyll.SourceData(
         path="youTube",
         body="A" * preprocessing.MAX_CHUNK_CHARS * n_chunks
     )
@@ -138,7 +138,7 @@ def test_add_data(client, n_chunks, testclasses, chunk_number_offset):
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = distyll.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
 
     # Tests
     collection.add_data(source_object_data, chunk_number_offset=chunk_number_offset)
@@ -159,14 +159,14 @@ def test_add_text(client, source_path, n_chunks, chunk_number_offset, source_tit
     source_class, chunk_class = testclasses
 
     # Connect to Weaviate
-    client = db.connect_weaviate()  # TODO - replace this with test client
+    client = distyll.connect_weaviate()  # TODO - replace this with test client
 
     for c in [source_class, chunk_class]:
         if client.schema.exists(c):
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = distyll.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
 
     # Tests
     source_text = "A" * preprocessing.MAX_CHUNK_CHARS * n_chunks
@@ -196,7 +196,7 @@ def test_add_from_youtube(client, youtube_url, testclasses):
             client.schema.delete_class(c)
 
     # Instantiate a collection
-    collection = db.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
+    collection = distyll.DBConnection(client=client, source_class=source_class, chunk_class=chunk_class)
 
     # Tests
     collection.add_from_youtube(youtube_url)
@@ -214,7 +214,7 @@ def test_add_from_youtube(client, youtube_url, testclasses):
     assert count > 0
 
     response = (
-        client.query.get(chunk_class, [i.name for i in fields(db.ChunkData)])
+        client.query.get(chunk_class, [i.name for i in fields(distyll.ChunkData)])
         .with_where({
             "path": ["source_path"],
             "operator": "Equal",
