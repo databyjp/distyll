@@ -1,7 +1,24 @@
-from dataclasses import fields
-from typing import Union
+from dataclasses import dataclass, fields
+from typing import Union, List, Dict
 import distyll
 import rag
+
+
+@dataclass
+class RAGResponse:
+    generated_text: str
+    objects: List[Dict]
+
+
+def parse_response(weaviate_response: dict, collection_name) -> RAGResponse:
+    generated_text = weaviate_response['data']['Get'][collection_name][0]['_additional']['generate']['groupedResult']
+    objects = weaviate_response['data']['Get'][collection_name]
+    del objects[0]['_additional']
+    rag_response = RAGResponse(
+        generated_text=generated_text,
+        objects=objects
+    )
+    return rag_response
 
 
 def generate_on_search(
@@ -42,7 +59,16 @@ def generate_on_search(
             .with_limit(rag.MAX_N_CHUNKS)
             .do()
         )
-    return response
+
+    # generated_text = response['data']['Get'][db.chunk_class][0]['_additional']['generate']['groupedResult']
+    # objects = response['data']['Get'][db.chunk_class]
+    # del objects[0]['_additional']
+    # rag_response = RAGResponse(
+    #     generated_text=generated_text,
+    #     objects=objects
+    # )
+    # return rag_response
+    return parse_response(response, db.chunk_class)
 
 
 def generate_on_summary(db: distyll.DBConnection, prompt: str, object_path: str):
@@ -55,7 +81,7 @@ def generate_on_summary(db: distyll.DBConnection, prompt: str, object_path: str)
     :return:
     """
     where_filter = {
-        "path": [f.name for f in fields(distyll.ChunkData) if 'path' in f.name],
+        "path": [f.name for f in fields(distyll.SourceData) if 'path' in f.name],
         "operator": "Equal",
         "valueText": object_path
     }
@@ -67,17 +93,13 @@ def generate_on_summary(db: distyll.DBConnection, prompt: str, object_path: str)
         .with_limit(rag.MAX_N_CHUNKS)  # There should only be 1 object here, but leaving this line in anyway
         .do()
     )
-    return response
 
-
-# def generative_on_all(db: distyll.DBConnection, prompt: str, object_path: str):
-#     """
-#     Perform a generative task on all objects
-#     For questions that relate to the entire object, and where using a summary will not be appropriate
-#     :param db:
-#     :param prompt:
-#     :param object_path: Object path identifier for filtering
-#     :return:
-#     """
-#     pass
-
+    # generated_text = response['data']['Get'][db.source_class][0]['_additional']['generate']['groupedResult']
+    # objects = response['data']['Get'][db.source_class]
+    # del objects[0]['_additional']
+    # rag_response = RAGResponse(
+    #     generated_text=generated_text,
+    #     objects=objects
+    # )
+    # return rag_response
+    return parse_response(response, db.source_class)

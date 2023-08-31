@@ -1,14 +1,11 @@
 from typing import Union, List
-
 import openai
 import os
 from dataclasses import dataclass
-
-from weaviate import Client
-from weaviate.util import generate_uuid5
-
 import preprocessing
 import prompts
+from weaviate import Client
+from weaviate.util import generate_uuid5
 
 openai.api_key = os.environ["OPENAI_APIKEY"]
 
@@ -47,7 +44,6 @@ class RAGBase:
         """
         Get object from DB in case the result has been saved,
         and if not, perform the generative task & add to the database
-        :param collection_name:
         :param prompt:
         :return:
         """
@@ -61,23 +57,24 @@ class RAGBase:
         prompt = prompts.summarize(self.source_text)
         return self.generate(prompt)
 
-    def summarize(self):
-        if len(self.source_text) > MAX_CONTEXT_SIZE:
+    def summarize(self, max_context_size: int = MAX_CONTEXT_SIZE):
+        if len(self.source_text) <= MAX_CONTEXT_SIZE:
+            return self.summarize_short()
+        else:
             n_chunks = int(len(self.source_text) // MAX_CONTEXT_SIZE) + 1
             chunk_size = int(len(self.source_text) // n_chunks) + 1
             chunks = [
-                self.source_text[chunk_size * i: chunk_size * (i+1) + int(chunk_size * 0.2)]
+                self.source_text[chunk_size * i: chunk_size * (i + 1) + int(chunk_size * 0.2)]
                 for i in range(n_chunks)
             ]
-            summaries = list()
+
+            summaries = []
             for chunk in chunks:
-                rag_base_chunk = RAGBase(chunk)
-                summary = rag_base_chunk.summarize_short()
+                summary = RAGBase(chunk).summarize_short()
                 summaries.append(summary)
-            rag_base_summaries = RAGBase(summaries)
-            return rag_base_summaries.summarize()
-        else:
-            return self.summarize_short()
+
+            combined_summary = ' '.join(summaries)
+            return RAGBase(combined_summary).summarize()
 
 
 def call_llm(prompt: str, use_expensive_model: bool = False) -> str:

@@ -116,6 +116,22 @@ def get_all_property_names(client, collection_name) -> List[str]:
     return [p["name"] for p in class_schema["properties"]]
 
 
+def get_source_filter(object_path):
+    return {
+        "path": [f.name for f in fields(SourceData) if 'path' in f.name],
+        "operator": "Equal",
+        "valueText": object_path
+    }
+
+
+def get_chunk_filter(object_path):
+    return {
+        "path": [f.name for f in fields(ChunkData) if 'path' in f.name],
+        "operator": "Equal",
+        "valueText": object_path
+    }
+
+
 # ===========================================================================
 # DB operations
 # ===========================================================================
@@ -149,8 +165,36 @@ class DBConnection:
 
         self.source_class = source_class
         self.chunk_class = chunk_class
+        self.source_properties = get_all_property_names(self.client, self.source_class)
         self.chunk_properties = get_all_property_names(self.client, self.chunk_class)
-        self.source_properties = get_all_property_names(self.client, self.source_properties)
+
+    def get_entry_count(self, source_path: str) -> int:
+        """
+        Get the number of objects available in a collection matching the value/name
+        :param source_path:
+        :return:
+        """
+        response = (
+            self.client.query.aggregate(self.source_class)
+            .with_where(get_source_filter(source_path))
+            .with_meta_count()
+            .do()
+        )
+        return response["data"]["Aggregate"][self.source_class][0]["meta"]["count"]
+
+    def get_chunk_count(self, source_path: str) -> int:
+        """
+        Get the number of objects available in a collection matching the value/name
+        :param source_path:
+        :return:
+        """
+        response = (
+            self.client.query.aggregate(self.chunk_class)
+            .with_where(get_chunk_filter(source_path))
+            .with_meta_count()
+            .do()
+        )
+        return response["data"]["Aggregate"][self.chunk_class][0]["meta"]["count"]
 
     def _add_object(self, data_object, collection_name):
         """
@@ -245,24 +289,29 @@ class DBConnection:
         :param youtube_url:
         :return:
         """
-        # Grab the YouTube Video & convert to transcript text
-        tmp_outpath = TEMPDIR/'temp_audio.mp3'
-        video_title = media.download_youtube(youtube_url=youtube_url, path_out=tmp_outpath)
-        transcript_texts = media.get_transcripts_from_audio_file(tmp_outpath)
+        # Is the object already present
+        if self.get_entry_count(youtube_url) > 0:
+            logger.info("Object already exists. Skipping import")
+            return self.get_chunk_count(youtube_url)
+        else:
+            # Grab the YouTube Video & convert to transcript text
+            tmp_outpath = TEMPDIR/'temp_audio.mp3'
+            video_title = media.download_youtube(youtube_url=youtube_url, path_out=tmp_outpath)
+            transcript_texts = media.get_transcripts_from_audio_file(tmp_outpath)
 
-        # Ingest transcripts into the database
-        obj_count = 0
-        for transcript_text in transcript_texts:
-            obj_count += self.add_text(
-                source_path=youtube_url, source_text=transcript_text,
-                chunk_number_offset=obj_count, source_title=video_title
-            )
+            # Ingest transcripts into the database
+            obj_count = 0
+            for transcript_text in transcript_texts:
+                obj_count += self.add_text(
+                    source_path=youtube_url, source_text=transcript_text,
+                    chunk_number_offset=obj_count, source_title=video_title
+                )
 
-        # Cleanup - if original file still exists
-        if os.path.exists(tmp_outpath):
-            os.remove(tmp_outpath)
+            # Cleanup - if original file still exists
+            if os.path.exists(tmp_outpath):
+                os.remove(tmp_outpath)
 
-        return obj_count
+            return obj_count
 
     # def add_pdf(self, pdf_url: str) -> int:
     #     """
