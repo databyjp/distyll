@@ -4,7 +4,6 @@ from typing import Optional, Union, Dict, List
 import weaviate
 from weaviate import Client
 from weaviate.util import generate_uuid5
-import openai
 import os
 from pathlib import Path
 
@@ -12,9 +11,9 @@ import preprocessing
 import media
 import logging
 
-logger = logging.getLogger(__name__)
+import rag
 
-openai.api_key = os.environ["OPENAI_APIKEY"]
+logger = logging.getLogger(__name__)
 
 DEFAULT_CLASS_CONFIG = {
     "vectorizer": "text2vec-openai",
@@ -37,6 +36,7 @@ class SourceData:
     path: str
     body: str
     title: Optional[str] = None
+    summary: Optional[str] = None
 
 
 @dataclass
@@ -194,7 +194,15 @@ class DBConnection:
         """
         chunks = preprocessing.chunk_text(source_object_data.body)
         # TODO - add source object import
+        """
+        Pseudocode
+        - Summarize source_object_data.body into an appropriate size
+        - Save to CollectionName.SUMMARY.value as 'summary' 
+        """
         counter = self.import_chunks(chunks, source_object_data, chunk_number_offset)
+        data_obj = asdict(source_object_data)
+        summary = rag.get_summary()
+        data_obj['summary'] = summary
 
         return counter
 
