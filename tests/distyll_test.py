@@ -30,9 +30,9 @@ def test_class_addition(client, collection_config):
     client.schema.delete_class(collection_name)
 
     # Add new class
-    response = distyll.add_class_if_not_present(client, collection_config)
+    response = distyll._add_class_if_not_present(client, collection_config)
     assert response is True  # Should be True if newly added
-    response = distyll.add_class_if_not_present(client, collection_config)
+    response = distyll._add_class_if_not_present(client, collection_config)
     assert response is None  # Should be None if it exists
 
     # Clean up

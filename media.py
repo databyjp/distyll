@@ -1,9 +1,12 @@
 import os
+from io import BytesIO
 from typing import List
 import openai
 import yt_dlp
 from pathlib import Path
 import logging
+import requests
+from pypdf import PdfReader
 
 logger = logging.getLogger(__name__)
 
@@ -98,3 +101,31 @@ def split_audio_files(audio_file_path: Path, max_segment_len: int = 900) -> List
         outfile.close()
         clip_outpaths.append(clip_outpath)
     return clip_outpaths
+
+
+def download_and_parse_pdf(pdf_url: str) -> str:
+    """
+    Get the text from a PDF and parse it
+    :param pdf_url:
+    :return:
+    """
+    print(f"Parsing {pdf_url} text")
+    # Send a GET request to the URL
+    response = requests.get(pdf_url)
+
+    # Create a file-like object from the content of the response
+    pdf_file = BytesIO(response.content)
+    pdf_reader = PdfReader(pdf_file)
+
+    # Initialize a string to store the text content
+    pdf_text = ""
+    n_pages = len(pdf_reader.pages)
+
+    # Iterate through the pages and extract the text
+    for page_num in range(n_pages):
+        page = pdf_reader.pages[page_num]
+        pdf_text += "\n" + page.extract_text()
+
+    print(f"Finished parsing {n_pages} pages from {pdf_url}")
+    # TODO - add tests
+    return pdf_text

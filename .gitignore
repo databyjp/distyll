@@ -5,7 +5,7 @@ temp_pdf_list.md
 
 .DS_Store
 *.mp3
-*temp*.ipynb
+temp.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

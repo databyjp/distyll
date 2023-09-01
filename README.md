@@ -10,7 +10,18 @@
 - Activate the virtual environment
 - Run `pip install -r requirements.txt`
     - You may need to install `ffmpeg` for your system for the audio parsing to work
-- Run the demo notebook
+- Run the demo notebook (`simple_demo.ipynb`)
+
+#### Components
+
+- **Main components**
+    - distyll.py: main (knowledge base) components
+    - query.py: Pre-defined queries for the database
+- **Utilties**
+    - media.py: For dealing with source media (e.g. YouTube videos, PDFs, etc)
+    - preprocessing.py: Text preprocessing utilities (chunking, remove whitespaces)
+    - prompts.py: LLM prompts
+    - rag.py: Make retrieval augmented generation tasks easier
 
 #### Notes
 - Powered by [Weaviate](https://www.weaviate.io)
@@ -23,5 +34,4 @@
 - **Save generated outputs**: Save money on existing data
 
 #### Tests
-- Under development
 - run `python -m pytest tests`

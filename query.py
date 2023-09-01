@@ -59,15 +59,6 @@ def generate_on_search(
             .with_limit(rag.MAX_N_CHUNKS)
             .do()
         )
-
-    # generated_text = response['data']['Get'][db.chunk_class][0]['_additional']['generate']['groupedResult']
-    # objects = response['data']['Get'][db.chunk_class]
-    # del objects[0]['_additional']
-    # rag_response = RAGResponse(
-    #     generated_text=generated_text,
-    #     objects=objects
-    # )
-    # return rag_response
     return parse_response(response, db.chunk_class)
 
 
@@ -93,13 +84,4 @@ def generate_on_summary(db: distyll.DBConnection, prompt: str, object_path: str)
         .with_limit(rag.MAX_N_CHUNKS)  # There should only be 1 object here, but leaving this line in anyway
         .do()
     )
-
-    # generated_text = response['data']['Get'][db.source_class][0]['_additional']['generate']['groupedResult']
-    # objects = response['data']['Get'][db.source_class]
-    # del objects[0]['_additional']
-    # rag_response = RAGResponse(
-    #     generated_text=generated_text,
-    #     objects=objects
-    # )
-    # return rag_response
     return parse_response(response, db.source_class)

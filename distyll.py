@@ -72,7 +72,7 @@ for field in fields(ChunkData):
 # ===========================================================================
 # DB MANAGEMENT
 # ===========================================================================
-def connect_weaviate(version: str = "latest") -> Client:
+def _connect_to_weaviate(version: str = "latest") -> Client:
     """
     :param version: Weaviate version to use
     Instantiate Weaviate
@@ -89,7 +89,7 @@ def connect_weaviate(version: str = "latest") -> Client:
     return client
 
 
-def add_class_if_not_present(client: Client, collection_config: Dict) -> Union[bool, None]:
+def _add_class_if_not_present(client: Client, collection_config: Dict) -> Union[bool, None]:
     """
     Add a Weaviate class if one does not exist
     :param client:
@@ -105,7 +105,7 @@ def add_class_if_not_present(client: Client, collection_config: Dict) -> Union[b
         return None
 
 
-def get_all_property_names(client, collection_name) -> List[str]:
+def _get_all_property_names(client, collection_name) -> List[str]:
     """
     Get property names from the Weaviate collection
     :param client:
@@ -116,7 +116,7 @@ def get_all_property_names(client, collection_name) -> List[str]:
     return [p["name"] for p in class_schema["properties"]]
 
 
-def get_source_filter(object_path):
+def _get_source_filter(object_path):
     return {
         "path": [f.name for f in fields(SourceData) if 'path' in f.name],
         "operator": "Equal",
@@ -124,12 +124,17 @@ def get_source_filter(object_path):
     }
 
 
-def get_chunk_filter(object_path):
+def _get_chunk_filter(object_path):
     return {
         "path": [f.name for f in fields(ChunkData) if 'path' in f.name],
         "operator": "Equal",
         "valueText": object_path
     }
+
+
+def _get_class_count(client, collection_name):
+    count = client.query.aggregate(collection_name).with_meta_count().do()
+    return count["data"]["Aggregate"][collection_name][0]["meta"]["count"]
 
 
 # ===========================================================================
@@ -144,7 +149,7 @@ class DBConnection:
             chunk_class: str = CollectionName.CHUNK.value
     ):
         if client is None:
-            client = connect_weaviate()
+            client = _connect_to_weaviate()
         self.client = client
 
         DB_CLASSES = {
@@ -161,12 +166,12 @@ class DBConnection:
         }
 
         for c in DB_CLASSES["classes"]:
-            add_class_if_not_present(client, c)
+            _add_class_if_not_present(client, c)
 
         self.source_class = source_class
         self.chunk_class = chunk_class
-        self.source_properties = get_all_property_names(self.client, self.source_class)
-        self.chunk_properties = get_all_property_names(self.client, self.chunk_class)
+        self.source_properties = _get_all_property_names(self.client, self.source_class)
+        self.chunk_properties = _get_all_property_names(self.client, self.chunk_class)
 
     def get_entry_count(self, source_path: str) -> int:
         """
@@ -176,11 +181,21 @@ class DBConnection:
         """
         response = (
             self.client.query.aggregate(self.source_class)
-            .with_where(get_source_filter(source_path))
+            .with_where(_get_source_filter(source_path))
             .with_meta_count()
             .do()
         )
         return response["data"]["Aggregate"][self.source_class][0]["meta"]["count"]
+
+    def get_total_object_counts(self) -> Dict[int]:
+        """
+        Get a total object count of this collection
+        :return:
+        """
+        object_count = _get_class_count(client=self.client, collection_name=self.source_class)
+        chunk_count = _get_class_count(client=self.client, collection_name=self.chunk_class)
+        # TODO - add tests
+        return {'object_count': object_count, 'chunk_count': object_count}
 
     def get_chunk_count(self, source_path: str) -> int:
         """
@@ -190,7 +205,7 @@ class DBConnection:
         """
         response = (
             self.client.query.aggregate(self.chunk_class)
-            .with_where(get_chunk_filter(source_path))
+            .with_where(_get_chunk_filter(source_path))
             .with_meta_count()
             .do()
         )
@@ -313,16 +328,16 @@ class DBConnection:
 
             return obj_count
 
-    # def add_pdf(self, pdf_url: str) -> int:
-    #     """
-    #     Add a PDF to the database
-    #     :param pdf_url:
-    #     :return:
-    #     """
-    #     text_content = utils.download_and_parse_pdf(pdf_url)
-    #     return self.add_text(
-    #         source_path=pdf_url,
-    #         source_text=text_content,
-    #         source_title=pdf_url
-    #     )
-    #
+    def add_pdf(self, pdf_url: str) -> int:
+        """
+        Add a PDF to the database
+        :param pdf_url:
+        :return:
+        """
+        text_content = media.download_and_parse_pdf(pdf_url)
+        # TODO - add tests
+        return self.add_text(
+            source_path=pdf_url,
+            source_text=text_content,
+            source_title=pdf_url
+        )
