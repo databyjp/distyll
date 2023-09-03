@@ -90,10 +90,6 @@ def process_add_pdf(submission: URLSubmission, background_tasks: BackgroundTasks
 
 @app.post("/arxiv/query_summary/")
 def query_summary(submission: QuerySummary):
-    # rag_response = db.query_summary(
-    #     prompt=submission.question,
-    #     object_path=submission.url
-    # )
     rag_response = RAGResponse(
         generated_text=submission.question,
         objects=[{"something": "something"}],
@@ -104,11 +100,6 @@ def query_summary(submission: QuerySummary):
 
 @app.post("/arxiv/query/")
 def query_chunks(submission: QueryChunks):
-    # rag_response = db.query_chunks(
-    #     prompt=submission.question,
-    #     search_query=submission.search_query,
-    #     object_path=submission.url
-    # )
     rag_response = RAGResponse(
         generated_text=submission.question,
         objects=[{"something": "something"}],
