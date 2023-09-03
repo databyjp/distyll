@@ -110,7 +110,7 @@ def download_and_parse_pdf(pdf_url: str) -> str:
     :param pdf_url:
     :return:
     """
-    print(f"Parsing {pdf_url} text")
+    logger.info(f"Parsing {pdf_url} text")
     # Send a GET request to the URL
     response = requests.get(pdf_url)
 

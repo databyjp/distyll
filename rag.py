@@ -11,16 +11,16 @@ logger = logging.getLogger(__name__)
 
 openai.api_key = os.environ["OPENAI_APIKEY"]
 
-MAX_CONTEXT_SIZE = 5000  # Max context size in characters
+MAX_CONTEXT_SIZE = 15000  # Max context size in characters
 MAX_N_CHUNKS = int(MAX_CONTEXT_SIZE / preprocessing.MAX_CHUNK_CHARS)   # Max number of chunks to grab in a set of results
-summary_size = int(MAX_CONTEXT_SIZE * 0.1)
+summary_size = int(MAX_CONTEXT_SIZE * 0.05)
 
 
 @dataclass
 class PROMPTS:
     summarize: str = f"""
     Using plain language, summarize the following as a whole. 
-    It should be around a paragraph or shorter.
+    Its length should be between a paragraph and a maximum of few paragraphs to a total of around {summary_size} words.
     If it would be useful, list the topics it covers, and key points.
 
     ===== SOURCE TEXT =====\n\n
@@ -77,16 +77,16 @@ class RAGBase:
         logger.info(f"Recursively summarizing {text_length}")
         if text_length <= max_context_size:
             # Summarize the text as is with an LLM
-            logger.info(f"Summarizing {text_length}")
+            logger.debug(f"Summarizing {text_length}")
             llm_summary = self.summarize_short()
-            logger.info(f"Summarized to {len(llm_summary)}")
+            logger.debug(f"Summarized to {len(llm_summary)}")
             return llm_summary
         else:
-            logger.info(f"{text_length} is too long")
+            logger.debug(f"{text_length} is too long, splitting into chunks")
             # Further split the data and summarize each chunk
             n_chunks = min(5, (text_length // max_context_size) + 1)
             chunk_size = int(text_length // n_chunks) + 1
-            logger.info(f"Chunking into {n_chunks} chunks")
+            logger.debug(f"Chunking into {n_chunks} chunks")
             chunks = [
                 self.source_text[chunk_size * i: chunk_size * (i + 1) + int(chunk_size * 0.05)]
                 for i in range(n_chunks)
@@ -96,7 +96,7 @@ class RAGBase:
                 summarized_chunk = RAGBase(chunk).summarize()
                 summaries.append(summarized_chunk)
             combined_summary = ' '.join(summaries)
-            logger.info(f"Combined summary {len(combined_summary)}")
+            logger.info(f"Combined summary length: {len(combined_summary)}. Summarizing...")
             return RAGBase(combined_summary).summarize()
 
 
@@ -112,10 +112,12 @@ def call_chatgpt(prompt: str, use_gpt_4: bool = False) -> str:
     :return:
     """
     if use_gpt_4 is False:
-        model_name = "gpt-3.5-turbo"
+        model_name = "gpt-3.5-turbo-16k"
     else:
-        model_name = "gpt-4"
+        model_name = "gpt-4-32k"
 
+    logger.debug(f"Calling {model_name}")
+    logger.debug(f"Prompt length: {len(prompt)}")
     completion = openai.ChatCompletion.create(
         model=model_name,
         messages=[

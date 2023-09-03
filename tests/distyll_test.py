@@ -6,7 +6,7 @@ import preprocessing
 
 @pytest.fixture(scope="session")
 def client():
-    return distyll.connect_weaviate()
+    return distyll._connect_to_weaviate()
 
 
 @pytest.fixture(scope="session")

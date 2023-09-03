@@ -22,7 +22,7 @@ GENERATIVE_MODULE = "generative-openai"
 DEFAULT_CLASS_CONFIG = {
     "vectorizer": VECTORIZER_MODULE,
     "moduleConfig": {
-        GENERATIVE_MODULE: {}
+        GENERATIVE_MODULE: {"model": "gpt-3.5-turbo-16k"}
     },
 }
 
@@ -51,10 +51,11 @@ def create_class_definition(collection_name, properties):
 
 @dataclass
 class ChunkData:
-    source_title: Optional[str]
     source_path: str
     chunk_text: str
     chunk_number: int
+    source_title: Optional[str] = None
+    category: Optional[str] = None
 
 
 chunk_props = list()
@@ -68,9 +69,10 @@ for field in fields(ChunkData):
 @dataclass
 class SourceData:
     path: str
-    body: str  # Skipped
+    body: str  # Skipped in vectorization - deleted before import
     title: Optional[str] = None
     summary: Optional[str] = None
+    category: Optional[str] = None
 
 
 source_props = list()
@@ -84,14 +86,14 @@ for field in fields(SourceData):
 # ===========================================================================
 def _connect_to_weaviate(version: str = "latest") -> Client:
     """
+    Connect to a default Weaviate instance.
+    Replace this to connect change your default Weaviate instance
     :param version: Weaviate version to use
     Instantiate Weaviate
     :return:
     """
     from weaviate import EmbeddedOptions
 
-    # Replace this with other client instantiation method to connect to another instance of Weaviate
-    # TODO - add option to add test client
     client = weaviate.Client(
         embedded_options=EmbeddedOptions(version=version),
     )
@@ -162,7 +164,7 @@ class DBConnection:
             client = _connect_to_weaviate()
         self.client = client
 
-        DB_CLASSES = {
+        db_classes = {
             "classes": [
                 create_class_definition(
                     source_class,
@@ -175,7 +177,7 @@ class DBConnection:
             ]
         }
 
-        for c in DB_CLASSES["classes"]:
+        for c in db_classes["classes"]:
             _add_class_if_not_present(client, c)
 
         self.source_class = source_class
@@ -205,7 +207,7 @@ class DBConnection:
         object_count = _get_class_count(client=self.client, collection_name=self.source_class)
         chunk_count = _get_class_count(client=self.client, collection_name=self.chunk_class)
         # TODO - add tests
-        return {'object_count': object_count, 'chunk_count': object_count}
+        return {'object_count': object_count, 'chunk_count': chunk_count}
 
     def get_chunk_count(self, source_path: str) -> int:
         """
@@ -229,6 +231,8 @@ class DBConnection:
         :return:
         """
         uuid = generate_uuid5(data_object)
+        logger.debug(f"Adding object with UUID {uuid}")
+        logger.debug(f"Object lengthL: {len(str(data_object))}")
         if self.client.data_object.exists(uuid=uuid, class_name=collection_name):
             return None
         else:
@@ -239,11 +243,16 @@ class DBConnection:
             )
             return True
 
-    def import_chunks(self, chunks: List[str], source_object_data: SourceData, chunk_number_offset: int = 0):
+    def import_chunks(
+            self,
+            chunks: List[str], source_object_data: SourceData,
+            category: str = '',
+            chunk_number_offset: int = 0):
         """
         Import text chunks via batch import process
         :param chunks:
         :param source_object_data:
+        :param category: Category of the source object (e.g. arxiv)
         :param chunk_number_offset:
         :return:
         """
@@ -255,7 +264,8 @@ class DBConnection:
                     source_path=source_object_data.path,
                     source_title=source_object_data.title,
                     chunk_text=chunk_text,
-                    chunk_number=i+chunk_number_offset
+                    chunk_number=i+chunk_number_offset,
+                    category=category
                 )
                 batch.add_data_object(
                     class_name=self.chunk_class,
@@ -266,17 +276,24 @@ class DBConnection:
         return counter
 
     def add_data(
-            self, source_object_data: SourceData, chunk_number_offset: int = 0
+            self, source_object_data: SourceData,
+            category: str = '',
+            chunk_number_offset: int = 0
     ) -> int:
         """
         Add objects to Weaviate
         :param source_object_data: Source data
+        :param category: Category of the source object (e.g. arxiv)
         :param chunk_number_offset: Any offset to chunk number
         :return:
         """
         # Add chunks
         chunks = preprocessing.chunk_text(source_object_data.body)
-        counter = self.import_chunks(chunks, source_object_data, chunk_number_offset)
+        counter = self.import_chunks(
+            chunks=chunks, source_object_data=source_object_data,
+            category=category,
+            chunk_number_offset=chunk_number_offset
+        )
 
         # Generate a summary and add the source object with it
         # Generate summary
@@ -294,13 +311,16 @@ class DBConnection:
 
     def add_text(
             self, source_path: str, source_text: str,
-            source_title: Optional[str] = None, chunk_number_offset: int = 0
+            source_title: Optional[str] = None,
+            category: str = '',
+            chunk_number_offset: int = 0
     ):
         """
         Add data from text input
         :param source_path:
         :param source_text:
         :param source_title:
+        :param category: Category of the source object (e.g. arxiv)
         :param chunk_number_offset:
         :return:
         """
@@ -308,13 +328,15 @@ class DBConnection:
             path=source_path,
             body=source_text,
             title=source_title,
+            category=category
         )
-        return self.add_data(source_object_data, chunk_number_offset=chunk_number_offset)
+        return self.add_data(source_object_data, category=category, chunk_number_offset=chunk_number_offset)
 
-    def add_from_youtube(self, youtube_url: str) -> int:
+    def add_from_youtube(self, youtube_url: str, category: str = '') -> int:
         """
         Add the transcript of a YouTube video to Weaviate
         :param youtube_url:
+        :param category: Category of the source object (e.g. youTube, cs224n)
         :return:
         """
         # Is the object already present
@@ -332,7 +354,8 @@ class DBConnection:
             for transcript_text in transcript_texts:
                 obj_count += self.add_text(
                     source_path=youtube_url, source_text=transcript_text,
-                    chunk_number_offset=obj_count, source_title=video_title
+                    chunk_number_offset=obj_count, source_title=video_title,
+                    category=category
                 )
 
             # Cleanup - if original file still exists
@@ -341,10 +364,11 @@ class DBConnection:
 
             return obj_count
 
-    def add_pdf(self, pdf_url: str) -> int:
+    def add_pdf(self, pdf_url: str, category: str = '') -> int:
         """
         Add a PDF to the database
         :param pdf_url:
+        :param category: Category of the source object (e.g. arxiv)
         :return:
         """
         # Is the object already present
@@ -357,7 +381,23 @@ class DBConnection:
             return self.add_text(
                 source_path=pdf_url,
                 source_text=text_content,
-                source_title=pdf_url
+                source_title=pdf_url,
+                category=category
+            )
+
+    def add_arxiv(self, arxiv_url):
+        if self.get_entry_count(arxiv_url) > 0:
+            logger.info("Object already exists. Skipping import")
+            return self.get_chunk_count(arxiv_url)
+        else:
+            parsed_arxiv = media.get_arxiv_paper(arxiv_url)
+            text_content = parsed_arxiv['pdf_text']
+            title = parsed_arxiv['title']
+            return self.add_text(
+                source_path=arxiv_url,
+                source_text=text_content,
+                source_title=title,
+                category='arxiv'
             )
 
     # ===== QUERY FUNCTIONS =====

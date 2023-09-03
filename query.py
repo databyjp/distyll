@@ -2,9 +2,11 @@ from dataclasses import dataclass
 from weaviate import Client
 from typing import Union, List, Dict, Optional
 import rag
+import logging
 
+logger = logging.getLogger(__name__)
 
-N_RAG_CHUNKS = int(rag.MAX_N_CHUNKS * 0.7)
+N_RAG_CHUNKS = int(rag.MAX_N_CHUNKS * 0.5)
 
 
 @dataclass
@@ -61,7 +63,7 @@ def generate_on_search(
             .with_where(where_filter)
             .with_near_text({'concepts': [search_query]})
             .with_generate(grouped_task=prompt)
-            .with_limit(limit)
+            .with_limit(N_RAG_CHUNKS)
             .with_sort({
                 'path': ['chunk_number'],
                 'order': 'asc'
@@ -100,6 +102,25 @@ def generate_on_summary(
         "operator": "Equal",
         "valueText": object_path
     }
+
+    obj_count = (
+        client.query
+        .aggregate(class_name)
+        .with_where(where_filter)
+        .with_meta_count()
+        .do()
+    )
+    # logger.debug(obj_count)
+    # logger.debug(f'Prompt length: {len(prompt)}')
+    # get_objs = (
+    #     client.query
+    #     .get(class_name, class_properties)
+    #     .with_where(where_filter)
+    #     # .with_generate(grouped_task=prompt)
+    #     .with_limit(N_RAG_CHUNKS)  # There should only be 1 object here, but leaving this line in anyway
+    #     .do()
+    # )
+    # logger.debug(f'Raw objs: {get_objs}')
     response = (
         client.query
         .get(class_name, class_properties)
