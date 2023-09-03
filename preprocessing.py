@@ -4,7 +4,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 MAX_CHUNK_WORDS = 150  # Max chunk size - in words
-MAX_CHUNK_CHARS = 500  # Max chunk size - in characters
+MAX_CHUNK_CHARS = 250  # Max chunk size - in characters
 
 
 def chunk_text_by_num_words(source_text: str, max_chunk_words: int = MAX_CHUNK_WORDS, overlap_fraction: float = 0.25) -> List:

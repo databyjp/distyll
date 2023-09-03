@@ -3,23 +3,33 @@ import openai
 import os
 from dataclasses import dataclass
 import preprocessing
-import prompts
 from weaviate import Client
 from weaviate.util import generate_uuid5
+import logging
+
+logger = logging.getLogger(__name__)
 
 openai.api_key = os.environ["OPENAI_APIKEY"]
 
 MAX_CONTEXT_SIZE = 5000  # Max context size in characters
 MAX_N_CHUNKS = preprocessing.MAX_CHUNK_CHARS   # Max number of chunks to grab in a set of results
+summary_size = int(MAX_CONTEXT_SIZE * 0.1)
 
 
 @dataclass
 class PROMPTS:
-    RAG_PREAMBLE = "Using only the included data here, answer the following question:"
-    SUMMARIZE = f"""
-        Using plain language, summarize the following as a whole into a paragraph or two of text.
-        List the topics it covers, and what the reader might learn from it.
-        """
+    summarize: str = f"""
+    Using plain language, summarize the following as a whole. 
+    It should be around a paragraph or shorter.
+    If it would be useful, list the topics it covers, and key points.
+
+    ===== SOURCE TEXT =====\n\n
+    """
+
+
+def get_summarize_prompt(source_text: str):
+    task_prompt = PROMPTS.summarize + source_text + '\n\n'
+    return task_prompt
 
 
 class RAGBase:
@@ -54,26 +64,39 @@ class RAGBase:
         return generated_text
 
     def summarize_short(self):
-        prompt = prompts.summarize(self.source_text)
+        prompt = get_summarize_prompt(self.source_text)
         return self.generate(prompt)
 
     def summarize(self, max_context_size: int = MAX_CONTEXT_SIZE):
-        if len(self.source_text) <= MAX_CONTEXT_SIZE:
-            return self.summarize_short()
+        """
+        Recursively summarise text to be a size that is less than a maximum allowable size
+        :param max_context_size:
+        :return:
+        """
+        text_length = len(self.source_text)
+        logger.info(f"Recursively summarizing {text_length}")
+        if text_length <= max_context_size:
+            # Summarize the text as is with an LLM
+            logger.info(f"Summarizing {text_length}")
+            llm_summary = self.summarize_short()
+            logger.info(f"Summarized to {len(llm_summary)}")
+            return llm_summary
         else:
-            n_chunks = int(len(self.source_text) // MAX_CONTEXT_SIZE) + 1
-            chunk_size = int(len(self.source_text) // n_chunks) + 1
+            logger.info(f"{text_length} is too long")
+            # Further split the data and summarize each chunk
+            n_chunks = min(5, (text_length // max_context_size) + 1)
+            chunk_size = int(text_length // n_chunks) + 1
+            logger.info(f"Chunking into {n_chunks} chunks")
             chunks = [
-                self.source_text[chunk_size * i: chunk_size * (i + 1) + int(chunk_size * 0.2)]
+                self.source_text[chunk_size * i: chunk_size * (i + 1) + int(chunk_size * 0.05)]
                 for i in range(n_chunks)
             ]
-
-            summaries = []
+            summaries = list()
             for chunk in chunks:
-                summary = RAGBase(chunk).summarize_short()
-                summaries.append(summary)
-
+                summarized_chunk = RAGBase(chunk).summarize()
+                summaries.append(summarized_chunk)
             combined_summary = ' '.join(summaries)
+            logger.info(f"Combined summary {len(combined_summary)}")
             return RAGBase(combined_summary).summarize()
 
 

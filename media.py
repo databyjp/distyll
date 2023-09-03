@@ -7,6 +7,7 @@ from pathlib import Path
 import logging
 import requests
 from pypdf import PdfReader
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,27 @@ def download_and_parse_pdf(pdf_url: str) -> str:
         page = pdf_reader.pages[page_num]
         pdf_text += "\n" + page.extract_text()
 
-    print(f"Finished parsing {n_pages} pages from {pdf_url}")
+    logger.info(f"Finished parsing {n_pages} pages from {pdf_url}")
     # TODO - add tests
     return pdf_text
+
+
+def get_arxiv_title(arxiv_url: str):
+    response = requests.get(arxiv_url)
+
+    # Check if the request was successful
+    if response.status_code != 200:
+        logger.info(f"Failed to get the page. HTTP status code: {response.status_code}")
+        return None
+
+    # Parse the HTML content of the page with BeautifulSoup
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    # Find the title element. The title is usually in a meta tag with name="citation_title"
+    title_element = soup.find('meta', {'name': 'citation_title'})
+
+    if title_element:
+        return title_element['content']
+    else:
+        logger.info("Failed to find the title element")
+        return None

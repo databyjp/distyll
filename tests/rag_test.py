@@ -6,6 +6,18 @@ from unittest.mock import patch
 @pytest.mark.parametrize(
     "source_text",
     [
+        "This is a source text",
+    ]
+)
+def test_summarize(source_text):
+    prompt = rag.summarize(source_text)
+    assert source_text in prompt
+    assert rag.PROMPTS.summarize in prompt
+
+
+@pytest.mark.parametrize(
+    "source_text",
+    [
         ("What is love?"),
         (["What is love?", "Baby don't hurt me."]),
     ]

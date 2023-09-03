@@ -9,16 +9,18 @@ from pathlib import Path
 
 import preprocessing
 import media
-import logging
-
 import rag
+
+import logging
 
 logger = logging.getLogger(__name__)
 
+VECTORIZER_MODULE = "text2vec-openai"
+GENERATIVE_MODULE = "generative-openai"
 DEFAULT_CLASS_CONFIG = {
-    "vectorizer": "text2vec-openai",
+    "vectorizer": VECTORIZER_MODULE,
     "moduleConfig": {
-        "generative-openai": {}
+        GENERATIVE_MODULE: {}
     },
 }
 
@@ -29,22 +31,6 @@ TEMPDIR.mkdir(exist_ok=True)
 class CollectionName(Enum):
     CHUNK: str = "DataChunk"
     SOURCE: str = "DataSource"
-
-
-@dataclass
-class SourceData:
-    path: str
-    body: str
-    title: Optional[str] = None
-    summary: Optional[str] = None
-
-
-@dataclass
-class ChunkData:
-    source_title: Optional[str]
-    source_path: str
-    chunk_text: str
-    chunk_number: int
 
 
 def create_class_definition(collection_name, properties):
@@ -61,12 +47,34 @@ def create_class_definition(collection_name, properties):
     }
 
 
+@dataclass
+class ChunkData:
+    source_title: Optional[str]
+    source_path: str
+    chunk_text: str
+    chunk_number: int
+
+
 chunk_props = list()
 for field in fields(ChunkData):
     if field.type == int:
         chunk_props.append({"name": field.name, "dataType": ["int"]})
     else:
         chunk_props.append({"name": field.name, "dataType": ["text"]})
+
+
+@dataclass
+class SourceData:
+    path: str
+    body: str  # Skipped
+    title: Optional[str] = None
+    summary: Optional[str] = None
+
+
+source_props = list()
+for field in fields(SourceData):
+    if field.name != 'body':
+        source_props.append({"name": field.name, "dataType": ["text"]})
 
 
 # ===========================================================================
@@ -156,7 +164,7 @@ class DBConnection:
             "classes": [
                 create_class_definition(
                     source_class,
-                    [{"name": field.name, "dataType": ["text"]} for field in fields(SourceData)]
+                    source_props
                 ),
                 create_class_definition(
                     chunk_class,
@@ -187,7 +195,7 @@ class DBConnection:
         )
         return response["data"]["Aggregate"][self.source_class][0]["meta"]["count"]
 
-    def get_total_object_counts(self) -> Dict[int]:
+    def get_total_object_counts(self) -> Dict[str, int]:
         """
         Get a total object count of this collection
         :return:
@@ -273,8 +281,11 @@ class DBConnection:
         rag_base = rag.RAGBase(source_object_data.body)
         summary = rag_base.summarize()
         source_obj = asdict(source_object_data)
+
         # Add the source object with summary
         source_obj['summary'] = summary
+        # Skip 'body' import
+        del source_obj['body']
         self._add_object(source_obj, self.source_class)
 
         return counter
@@ -334,10 +345,15 @@ class DBConnection:
         :param pdf_url:
         :return:
         """
-        text_content = media.download_and_parse_pdf(pdf_url)
-        # TODO - add tests
-        return self.add_text(
-            source_path=pdf_url,
-            source_text=text_content,
-            source_title=pdf_url
-        )
+        # Is the object already present
+        if self.get_entry_count(pdf_url) > 0:
+            logger.info("Object already exists. Skipping import")
+            return self.get_chunk_count(pdf_url)
+        else:
+            text_content = media.download_and_parse_pdf(pdf_url)
+            # TODO - add tests
+            return self.add_text(
+                source_path=pdf_url,
+                source_text=text_content,
+                source_title=pdf_url
+            )
