@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 openai.api_key = os.environ["OPENAI_APIKEY"]
 
 MAX_CONTEXT_SIZE = 5000  # Max context size in characters
-MAX_N_CHUNKS = preprocessing.MAX_CHUNK_CHARS   # Max number of chunks to grab in a set of results
+MAX_N_CHUNKS = int(MAX_CONTEXT_SIZE / preprocessing.MAX_CHUNK_CHARS)   # Max number of chunks to grab in a set of results
 summary_size = int(MAX_CONTEXT_SIZE * 0.1)
 
 

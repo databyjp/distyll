@@ -13,6 +13,8 @@ import rag
 
 import logging
 
+from query import RAGResponse, generate_on_search, generate_on_summary
+
 logger = logging.getLogger(__name__)
 
 VECTORIZER_MODULE = "text2vec-openai"
@@ -357,3 +359,16 @@ class DBConnection:
                 source_text=text_content,
                 source_title=pdf_url
             )
+
+    # ===== QUERY FUNCTIONS =====
+    def query_summary(self, prompt: str, object_path: str) -> RAGResponse:
+        return generate_on_summary(
+            self.client, class_name=self.source_class, class_properties=self.source_properties,
+            prompt=prompt, object_path=object_path
+        )
+
+    def query_chunks(self, prompt: str, object_path: str, search_query: str) -> RAGResponse:
+        return generate_on_search(
+            self.client, class_name=self.chunk_class, class_properties=self.chunk_properties,
+            prompt=prompt, search_query=search_query, object_path=object_path
+        )
