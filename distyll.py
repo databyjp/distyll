@@ -84,7 +84,7 @@ for field in fields(SourceData):
 # ===========================================================================
 # DB MANAGEMENT
 # ===========================================================================
-def _connect_to_weaviate(version: str = "latest") -> Client:
+def connect_to_default_weaviate(version: str = "latest") -> Client:
     """
     Connect to a default Weaviate instance.
     Replace this to connect change your default Weaviate instance
@@ -158,10 +158,10 @@ class DBConnection:
             self,
             client: Union[Client, None] = None,
             source_class: str = CollectionName.SOURCE.value,
-            chunk_class: str = CollectionName.CHUNK.value
+            chunk_class: str = CollectionName.CHUNK.value,
     ):
         if client is None:
-            client = _connect_to_weaviate()
+            client = connect_to_default_weaviate()
         self.client = client
 
         db_classes = {
@@ -204,10 +204,9 @@ class DBConnection:
         Get a total object count of this collection
         :return:
         """
-        object_count = _get_class_count(client=self.client, collection_name=self.source_class)
+        source_count = _get_class_count(client=self.client, collection_name=self.source_class)
         chunk_count = _get_class_count(client=self.client, collection_name=self.chunk_class)
-        # TODO - add tests
-        return {'object_count': object_count, 'chunk_count': chunk_count}
+        return {'source_count': source_count, 'chunk_count': chunk_count}
 
     def get_chunk_count(self, source_path: str) -> int:
         """
@@ -377,7 +376,6 @@ class DBConnection:
             return self.get_chunk_count(pdf_url)
         else:
             text_content = media.download_and_parse_pdf(pdf_url)
-            # TODO - add tests
             return self.add_text(
                 source_path=pdf_url,
                 source_text=text_content,

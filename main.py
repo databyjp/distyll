@@ -54,7 +54,7 @@ class QueryChunks(BaseModel):
 def root():
     obj_counts = db.get_total_object_counts()
     return {
-        "message": f"Hello there! You have {obj_counts['object_count']} objects totalling {obj_counts['chunk_count']} chunks."}
+        "message": f"Hello there! You have {obj_counts['source_count']} source objects totalling {obj_counts['chunk_count']} chunks."}
 
 
 def get_object_count(url: str) -> bool:

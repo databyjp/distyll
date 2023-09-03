@@ -79,7 +79,7 @@ class RAGBase:
             # Summarize the text as is with an LLM
             logger.debug(f"Summarizing {text_length}")
             llm_summary = self.summarize_short()
-            logger.debug(f"Summarized to {len(llm_summary)}")
+            logger.info(f"Summarized {text_length} to {len(llm_summary)}")
             return llm_summary
         else:
             logger.debug(f"{text_length} is too long, splitting into chunks")
