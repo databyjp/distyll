@@ -4,7 +4,7 @@ from typing import Union, List, Dict, Optional
 import rag
 
 
-N_RAG_CHUNKS = int(rag.MAX_N_CHUNKS * 0.5)
+N_RAG_CHUNKS = int(rag.MAX_N_CHUNKS * 0.7)
 
 
 @dataclass
@@ -62,6 +62,10 @@ def generate_on_search(
             .with_near_text({'concepts': [search_query]})
             .with_generate(grouped_task=prompt)
             .with_limit(limit)
+            .with_sort({
+                'path': ['chunk_number'],
+                'order': 'asc'
+            })
             .do()
         )
     else:
@@ -70,7 +74,7 @@ def generate_on_search(
             .get(class_name, class_properties)
             .with_near_text({'concepts': [search_query]})
             .with_generate(grouped_task=prompt)
-            .with_limit(rag.MAX_N_CHUNKS)
+            .with_limit(N_RAG_CHUNKS)
             .do()
         )
     return parse_response(response, class_name)
@@ -101,7 +105,7 @@ def generate_on_summary(
         .get(class_name, class_properties)
         .with_where(where_filter)
         .with_generate(grouped_task=prompt)
-        .with_limit(rag.MAX_N_CHUNKS)  # There should only be 1 object here, but leaving this line in anyway
+        .with_limit(N_RAG_CHUNKS)  # There should only be 1 object here, but leaving this line in anyway
         .do()
     )
     return parse_response(response, class_name)
