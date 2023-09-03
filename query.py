@@ -23,7 +23,7 @@ def parse_response(weaviate_response: dict, collection_name) -> RAGResponse:
 
 def generate_on_search(
         db: distyll.DBConnection, prompt: str, search_query: str,
-        object_path: Union[None, str], limit: int = rag.MAX_N_CHUNKS
+        object_path: Union[None, str], limit: int = int(rag.MAX_N_CHUNKS / 2)
 ):
     """
     Perform a search and then a generative task on those search results

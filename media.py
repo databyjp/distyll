@@ -151,3 +151,29 @@ def get_arxiv_title(arxiv_url: str):
     else:
         logger.info("Failed to find the title element")
         return None
+
+
+def get_arxiv_paper(arxiv_url: str):
+    # Example URL: 'https://arxiv.org/pdf/2305.15334'
+    # Validate `arxiv.org` in URL
+    if 'arxiv.org' not in arxiv_url:
+        logger.info("URL is not from arxiv.org")
+        return None
+
+    # Get Arxiv paper ID
+    arxiv_id = arxiv_url.split('/')[-1]
+
+    # Get title
+    abstract_url = f'https://arxiv.org/abs/{arxiv_id}'
+    title = get_arxiv_title(abstract_url)
+
+    # Get PDf
+    pdf_url = f'https://arxiv.org/pdf/{arxiv_id}'
+    pdf_text = download_and_parse_pdf(pdf_url)
+
+    # Return object with title and PDF
+    return {
+        'title': title,
+        'pdf_text': pdf_text
+    }
+
