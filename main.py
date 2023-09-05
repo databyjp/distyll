@@ -90,6 +90,25 @@ def process_add_pdf(submission: URLSubmission, background_tasks: BackgroundTasks
 
 @app.post("/arxiv/query_summary/")
 def query_summary(submission: QuerySummary):
+    # rag_response = db.query_summary(
+    #     prompt=submission.question,
+    #     object_path=submission.url
+    # )
+    rag_response = RAGResponse(
+        generated_text=submission.question,
+        objects=[{"something": "something"}],
+        error=None
+    )
+    return asdict(rag_response)
+
+
+@app.post("/arxiv/query_chunks/")
+def query_chunks(submission: QueryChunks):
+    # rag_response = db.query_chunks(
+    #     prompt=submission.question,
+    #     search_query=submission.search_query,
+    #     object_path=submission.url
+    # )
     rag_response = RAGResponse(
         generated_text=submission.question,
         objects=[{"something": "something"}],
@@ -99,13 +118,32 @@ def query_summary(submission: QuerySummary):
 
 
 @app.post("/arxiv/query/")
-def query_chunks(submission: QueryChunks):
+def query(submission: QueryChunks):
+    # rag_response = db.query(
+    #     prompt=submission.question,
+    #     search_query=submission.search_query,
+    #     object_path=submission.url
+    # )
     rag_response = RAGResponse(
         generated_text=submission.question,
         objects=[{"something": "something"}],
         error=None
     )
     return asdict(rag_response)
+
+
+@app.post("/arxiv/paper/")
+def get_paper_details(submission: URLSubmission):
+
+    source_object = db.get_source(submission.url)
+    n_chunks = db.get_chunk_count(submission.url)
+    first_n_chunks = db.get_chunks(submission.url)
+
+    return {
+        "source_object": source_object,
+        "chunk_count": n_chunks,
+        "chunk_samples": first_n_chunks
+    }
 
 
 if __name__ == "__main__":

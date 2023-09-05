@@ -9,11 +9,12 @@ from pathlib import Path
 
 import preprocessing
 import media
+import query
 import rag
 
 import logging
 
-from query import RAGResponse, generate_on_search, generate_on_summary
+from query import RAGResponse, generate_on_search, generate_on_summary, generate_on_both
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +223,24 @@ class DBConnection:
         )
         return response["data"]["Aggregate"][self.chunk_class][0]["meta"]["count"]
 
+    def get_source(self, source_url: str):
+        source_objects = query.get_source_objects(
+            client=self.client, collection_name=self.source_class, collection_properties=self.source_properties,
+            where_filter=query.path_filter(source_url)
+        )
+        if len(source_objects) > 1:
+            logger.warning(f"{source_url} has more than 1 objects in the database! ")
+        return source_objects[0]
+
+    def get_chunks(self, source_url: str, max_chunks: int = rag.MAX_N_CHUNKS):
+        chunk_objects = query.get_chunk_objects(
+            client=self.client, collection_name=self.source_class, collection_properties=self.source_properties,
+            where_filter=query.path_filter(source_url), limit=max_chunks
+        )
+        return chunk_objects
+
+    # ===== ADD DATA =====
+
     def _add_object(self, data_object, collection_name):
         """
         Add an object to the collection
@@ -407,6 +426,13 @@ class DBConnection:
 
     def query_chunks(self, prompt: str, object_path: str, search_query: str) -> RAGResponse:
         return generate_on_search(
+            self.client, class_name=self.chunk_class, class_properties=self.chunk_properties,
+            prompt=prompt, search_query=search_query, object_path=object_path
+        )
+
+
+    def query(self, prompt: str, object_path: str, search_query: str) -> RAGResponse:
+        return generate_on_both(
             self.client, class_name=self.chunk_class, class_properties=self.chunk_properties,
             prompt=prompt, search_query=search_query, object_path=object_path
         )

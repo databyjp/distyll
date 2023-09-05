@@ -109,6 +109,16 @@ def test_get_total_object_counts(client, testclasses):
         client.schema.delete_class(c)
 
 
+def test_get_source():
+    # TODO - needs actual tests
+    pass
+
+
+def test_get_chunks():
+    # TODO - needs actual tests
+    pass
+
+
 @pytest.mark.parametrize(
     "wv_object",
     [
