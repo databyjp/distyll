@@ -104,7 +104,7 @@ def generate_on_search(
             .with_where(where_filter)
             .with_near_text({'concepts': [search_query]})
             .with_generate(grouped_task=prompt)
-            .with_limit(N_RAG_CHUNKS)
+            .with_limit(limit)
             .with_sort({
                 'path': ['chunk_number'],
                 'order': 'asc'
