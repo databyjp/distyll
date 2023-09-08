@@ -48,6 +48,26 @@ def download_youtube(youtube_url: str, path_out: Path, audio_only: bool = True) 
     return video_title
 
 
+def get_youtube_title(youtube_url: str) -> str:
+    """
+    Download a YouTube video and return its title
+    :param youtube_url:
+    :param path_out:
+    :param audio_only:
+    :return: Video title
+    """
+    ydl_opts = {
+        'quiet': True,
+        'extract_flat': True,
+        'force_generic_extractor': True,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        result = ydl.extract_info(youtube_url, download=False)
+        video_title = result['title']
+    return video_title
+
+
 def get_transcripts_from_audio_file(audio_file_path: Path, max_segment_len: int = 900) -> List[str]:
     """
     Get transcripts of audio files using

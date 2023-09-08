@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-N_RAG_CHUNKS = int(rag.MAX_N_CHUNKS * 0.5)
+N_RAG_CHUNKS = int(rag.MAX_N_CHUNKS * 0.25)
 
 
 @dataclass
@@ -105,10 +105,10 @@ def generate_on_search(
             .with_near_text({'concepts': [search_query]})
             .with_generate(grouped_task=prompt)
             .with_limit(limit)
-            .with_sort({
-                'path': ['chunk_number'],
-                'order': 'asc'
-            })
+            # .with_sort({
+            #     'path': ['chunk_number'],
+            #     'order': 'asc'
+            # })
             .do()
         )
     else:
