@@ -6,10 +6,16 @@ import rag
 
 st.set_page_config(layout="wide")
 
+
+# @st.cache
+def get_youtube_title(video_url):
+    return media.get_youtube_title(video_url)
+
+
 img_col, _, _ = st.columns([10, 30, 30])
 with img_col:
     st.image("media/weaviate-logo-dark-name-transparent-for-light.png")
-st.header("Better living with RAG")
+st.header("Better living through RAG")
 
 video_options = [
     "https://youtu.be/-ebMbqkdQdg",  # Margot Robbie interview
@@ -19,17 +25,26 @@ video_options = [
     "https://youtu.be/enRb6fp5_hw",  # Stanford: NLU Information Retrieval: Guiding Ideas Spring 2023
 ]
 
+
 video_title_dict = {
-    video_id: media.get_youtube_title(video_id) for video_id in video_options
+    video_id: get_youtube_title(video_id) for video_id in video_options
 }
 title_video_dict = {
     v: k for k, v in video_title_dict.items()
 }
 
-info, tab1, tab2 = st.tabs(["Source data", "Demo", "Behind the magic"])
+background, info, tab1, tab2 = st.tabs(["Background", "Source data", "Demo", "Behind the magic"])
+with background:
+    with st.expander("Problem statement"):
+        st.markdown("### There is way too much content out there")
+        st.markdown("*****")
+    with st.expander("Solution"):
+        st.markdown("### What if you didn't *have* to watch a video for its information?")
+        st.markdown("- Get a video summary.\n- Ask the video whatever you want.")
+        st.markdown("*****")
+
+
 with info:
-    st.markdown("### What if you didn't *have* to watch a video for its information?")
-    st.markdown("- Get a video summary.\n- Ask the video whatever you want.")
     # st.markdown("Ask the video whatever you want.")
     st.subheader("Available videos:")
     a, b, c = st.columns(3)
@@ -41,17 +56,6 @@ with info:
             st.video(data=video)
             title = video_title_dict[video]
             st.write(title)
-
-    # for i, col in enumerate([a, b, c]):
-    #     with col:
-    #         st.video(data=video_options[i])
-
-    # for k, v in title_video_dict.items():
-    #     st.markdown(f"- {k} [link]({v})")
-    # for i, col in enumerate([a, b, c]):
-    #     with col:
-    #         title = video_title_dict[video_options[i]]
-    #         st.write(title)
 
 with tab1:
     st.subheader("Talk to a video")
@@ -91,19 +95,9 @@ with tab1:
         summary = get_summary(youtube_url)
         st.write(summary.generated_text)
 
-
     st.markdown("#### Extract anything from this video")
 
     user_question = st.text_input("Ask the video anything!")
-
-    # suggested_query = rag.call_llm(prompt=f"""
-    # Return a search string that we could use to search for text that relates to {user_question}.
-    # Do not return any explanations. Only return the suggested search string itself.
-    #
-    # ======
-    #
-    # Search string:
-    # """)
 
 with tab2:
     st.subheader("How does it all work?")
@@ -111,14 +105,24 @@ with tab2:
 
 if len(user_question) > 3:
     with tab1:
-        # with st.expander("Query string used"):
-        #     st.write(suggested_query)
+        with st.expander("Raw data used:"):
+            where_filter = {
+                "path": ["source_path"],
+                "operator": "Equal",
+                "valueText": youtube_url
+            }
+            raw_response = (
+                db.client.query
+                .get(db.chunk_class, db.chunk_properties)
+                .with_where(where_filter)
+                .with_near_text({'concepts': [user_question]})
+                .with_limit(rag.MAX_N_CHUNKS)
+                .do()
+            )
+            for resp_obj in raw_response["data"]["Get"][db.chunk_class]:
+                st.write(resp_obj)
+
         response = db.query_chunks(
-            # prompt=f"""
-            # If this text contains information about {user_question}, answer the question: {user_question}.
-            # The answer should be well-written, succinct and thoughtful, using plain language even if the source material is technical.
-            # If there is no information, say 'The source material does not say.'.
-            # """,
             prompt=f"""
             Answer the question: {user_question}.
             Feel free to use the text contained here.
@@ -127,14 +131,13 @@ if len(user_question) > 3:
             """,
             object_path=youtube_url,
             search_query=user_question
-            # search_query=suggested_query
         )
         st.write(response.generated_text)
 
     with tab2:
-        with st.expander("Raw data used:"):
-            for resp_obj in response.objects:
-                st.write(resp_obj)
+        # with st.expander("Raw data used:"):
+        #     for resp_obj in response.objects:
+        #         st.write(resp_obj)
         with st.expander("Code snippet:"):
             st.code(
                 """
@@ -150,10 +153,6 @@ if len(user_question) > 3:
                 .with_near_text({'concepts': [search_query]})
                 .with_generate(grouped_task=prompt)
                 .with_limit(limit)
-                .with_sort({
-                    'path': ['chunk_number'],
-                    'order': 'asc'
-                })
                 .do()
             )            
                 """,
