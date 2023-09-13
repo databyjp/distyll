@@ -85,7 +85,7 @@ for field in fields(SourceData):
 # ===========================================================================
 # DB MANAGEMENT
 # ===========================================================================
-def connect_to_default_weaviate(version: str = "latest") -> Client:
+def connect_to_default_weaviate(version: str = "1.21.2") -> Client:
     """
     Connect to a default Weaviate instance.
     Replace this to connect change your default Weaviate instance
