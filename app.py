@@ -69,13 +69,14 @@ with tab1:
     import os
 
     client = weaviate.Client(
-        url=os.environ['JP_WCS_URL'],
-        auth_client_secret=weaviate.AuthApiKey(os.environ['JP_WCS_ADMIN_KEY']),
+        url='https://lhy7sdrnq0uvf7tgjrgnkw.c0.europe-west2.gcp.weaviate.cloud',  # Demo cluster
+        auth_client_secret=weaviate.AuthApiKey('PBZfT3JD11pBGHGp8lX7ALXE3nXvKh15weIy'),  # Read-only key
         additional_headers={
             'X-OpenAI-Api-Key': os.environ['OPENAI_APIKEY']
         }
     )
     db = distyll.DBConnection(client=client)
+    db.set_apikey(openai_key=os.environ["OPENAI_APIKEY"])
 
 
     def get_summary(source_path):

@@ -10,7 +10,8 @@
 - Activate the virtual environment
 - Run `pip install -r requirements.txt`
     - You may need to install `ffmpeg` for your system for the audio parsing to work
-- Run the demo notebook (`simple_demo.ipynb`)
+- Run the demo notebooks (`demo_arxiv.ipynb` or `demo_video.ipynb`)
+- You may need to set the API key by modifying `db.set_apikey(openai_key=os.environ["OPENAI_APIKEY"])`
 
 #### Components
 
@@ -20,7 +21,6 @@
 - **Utilties**
     - media.py: For dealing with source media (e.g. YouTube videos, PDFs, etc)
     - preprocessing.py: Text preprocessing utilities (chunking, remove whitespaces)
-    - prompts.py: LLM prompts
     - rag.py: Make retrieval augmented generation tasks easier
 
 #### Notes

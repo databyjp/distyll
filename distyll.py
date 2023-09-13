@@ -186,6 +186,9 @@ class DBConnection:
         self.source_properties = _get_all_property_names(self.client, self.source_class)
         self.chunk_properties = _get_all_property_names(self.client, self.chunk_class)
 
+    def set_apikey(self, openai_key):
+        self.client._connection._headers["x-openai-api-key"] = openai_key
+
     def get_entry_count(self, source_path: str) -> int:
         """
         Get the number of objects available in a collection matching the value/name
