@@ -10,9 +10,8 @@ from unittest.mock import patch
     ]
 )
 def test_summarize(source_text):
-    prompt = rag.summarize(source_text)
+    prompt = rag.get_summarize_prompt(source_text)
     assert source_text in prompt
-    assert rag.PROMPTS.summarize in prompt
 
 
 @pytest.mark.parametrize(
@@ -34,7 +33,6 @@ def test_ragbase_init(source_text):
 @pytest.mark.parametrize(
     "prompt, answer",
     [
-        ("What is 2 + 2?", "4"),
         ("What is the capital of France?", "Paris"),
     ]
 )

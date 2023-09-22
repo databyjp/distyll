@@ -7,7 +7,6 @@ import rag
 st.set_page_config(layout="wide")
 
 
-# @st.cache
 def get_youtube_title(video_url):
     return media.get_youtube_title(video_url)
 
@@ -45,7 +44,6 @@ with background:
 
 
 with info:
-    # st.markdown("Ask the video whatever you want.")
     st.subheader("Available videos:")
     a, b, c = st.columns(3)
     columns = [a, b, c]
@@ -90,7 +88,6 @@ with tab1:
         return summary_out
 
 
-    # st.subheader("Get a summary")
     st.markdown("#### Get a summary")
     with st.expander("What is this about?"):
         summary = get_summary(youtube_url)
@@ -136,9 +133,6 @@ if len(user_question) > 3:
         st.write(response.generated_text)
 
     with tab2:
-        # with st.expander("Raw data used:"):
-        #     for resp_obj in response.objects:
-        #         st.write(resp_obj)
         with st.expander("Code snippet:"):
             st.code(
                 """
