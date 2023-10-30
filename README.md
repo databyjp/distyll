@@ -6,15 +6,17 @@
 
 #### How to run
 - Clone the repo
-- Create a virtual environment
-- Activate the virtual environment
+- Create & activate a virtual environment
 - Run `pip install -r requirements.txt`
     - You may need to install `ffmpeg` for your system for the audio parsing to work
-- Run the demo notebooks (`demo_arxiv.ipynb` to test it on PDFs, or `demo_youtube.ipynb` for videos).
-    - Note the video demo uses OpenAI whisper which is comparatively expensive.
-- You may need to set the OpenAI API key by modifying `db.set_apikey(openai_key=os.environ["OPENAI_APIKEY"])`
-- Run the Streamlit demo with `streamlit run app.py`. 
+    - You may need to set the OpenAI API key by modifying `db.set_apikey(openai_key=os.environ["OPENAI_APIKEY"])`
+- Run the Streamlit demo with `streamlit run app.py`.
     - Again, you will need to have set the OpenAI API key, either by adding `OPENAI_APIKEY` to your environment variables, or in `app.py` (search for where `X-OpenAI-Api-Key` is set).
+
+<!-- #### Demo notebooks
+
+- Run the demo notebooks (`demo_arxiv.ipynb` to test it on PDFs, or `demo_youtube.ipynb` for videos).
+    - Note the video demo uses OpenAI whisper which is comparatively expensive. -->
 
 #### Components
 
