@@ -27,7 +27,7 @@ def test_download_pdf(pdf_url, dl_dir):
 
 pdf_data = [
     (
-        "test_data/1706.03762.pdf",
+        "tests/test_data/1706.03762.pdf",
         [
             "mechanisms have become an integral part of compelling sequence",
             "outperforms the best previously reported models",
@@ -86,7 +86,7 @@ def test_get_arxiv_paper(pdf_url, val_strings, title):
 youtube_testdata = [
     (
         "https://youtu.be/enRb6fp5_hw",
-        "Stanford: NLU Information Retrieval: Guiding Ideas Spring 2023",
+        "Stanford XCS224U",
     )
 ]
 
@@ -94,6 +94,6 @@ youtube_testdata = [
 @pytest.mark.parametrize("yt_url, title", youtube_testdata)
 def test_get_youtube_transcript(yt_url, title):
     youtube_data = get_youtube_transcript(yt_url)
-    assert "Stanford" in youtube_data["title"]
+    assert title in youtube_data["title"]
     assert yt_url in youtube_data["yt_url"]
     assert len(youtube_data["transcripts"][0]) > 1000

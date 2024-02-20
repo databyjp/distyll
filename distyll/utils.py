@@ -1,15 +1,37 @@
 from bs4 import BeautifulSoup
-from typing import Union, List
+from typing import Union, List, Dict, Any
 import requests
 import logging
 import distyll.loggerconfig
+from typing import Union
 from pathlib import Path
 from openai import OpenAI
 import yt_dlp
 import os
 
-oai_client = OpenAI()
-oai_client.api_key = os.getenv("OPENAI_APIKEY")
+
+def init_dl_dir(dir_path: Union[str, Path]) -> Path:
+    """
+    Initializes the download directory.
+
+    Args:
+        dir_path (Union[str, Path]): The path to the download directory.
+
+    Returns:
+        Path: The path to the initialized download directory.
+    """
+    if type(dir_path) is str:
+        dir_path = Path(dir_path)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    return dir_path
+
+
+def get_openai_client(apikey: Union[str, None] = None) -> OpenAI:
+    if apikey is None:
+        oai_client = OpenAI(api_key=os.getenv("OPENAI_APIKEY"))
+    else:
+        oai_client = OpenAI(api_key=apikey)
+    return oai_client
 
 
 def get_arxiv_title(arxiv_url: str) -> Union[str, None]:
@@ -108,6 +130,20 @@ def chunk_text(source_text: str) -> List[str]:
     return chunk_text_by_num_words(source_text)
 
 
+def clean_yt_url(url: str) -> str:
+    url = url.lower()
+    url = url.split("?")[0]
+    return url
+
+
+def extract_metadata(video_info: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = dict()
+    for k in ["title", "upload_date", "channel", "uploader"]:
+        if k in video_info:
+            metadata[k] = video_info[k]
+    return metadata
+
+
 def download_youtube(youtube_url: str, path_out: Path) -> str:
     """
     Download a YouTube video's audio and return its title
@@ -136,18 +172,19 @@ def download_youtube(youtube_url: str, path_out: Path) -> str:
     }
 
     with yt_dlp.YoutubeDL(yt_dlp_params) as video:
-        info_dict = video.extract_info(youtube_url, download=True)
-        video_title = info_dict["title"]
+        result = video.extract_info(youtube_url, download=True)
+        metadata = extract_metadata(result)
+        video_title = result["title"]
         logging.info(f"Found {video_title} - downloading")
         video.download(youtube_url)
         logging.info(f"Successfully downloaded to {path_out}")
 
-    return video_title
+    return metadata
 
 
-def get_youtube_title(youtube_url: str) -> str:
+def get_youtube_metadata(youtube_url: str) -> Dict[str, str]:
     """
-    Download a YouTube video and return its title
+    Download a YouTube video and return its metadata
     :param youtube_url:
     :param path_out:
     :param audio_only:
@@ -161,20 +198,21 @@ def get_youtube_title(youtube_url: str) -> str:
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         result = ydl.extract_info(youtube_url, download=False)
-        video_title = result["title"]
-    return video_title
+        metadata = extract_metadata(result)
+    return metadata
 
 
 def get_transcripts_from_audio_file(
-    audio_file_path: Path, max_segment_len: int = 900
+    audio_file_path: Path, max_segment_len: int = 900, openai_apikey: Union[str, None] = None,
 ) -> List[str]:
     """
     Get transcripts of audio files using
     :param audio_file_path:
     :param max_segment_len:
+    :param openai_apikey:
     :return:
     """
-
+    oai_client = get_openai_client(openai_apikey)
     clip_outpaths = split_audio_files(audio_file_path, max_segment_len)
     transcript_texts = list()
     logging.info(f"Getting transcripts from {len(clip_outpaths)} audio files...")
@@ -214,7 +252,7 @@ def split_audio_files(audio_file_path: Path, max_segment_len: int = 900) -> List
         n_segments = 1
     logging.info(f"Splitting audio to {n_segments}")
     for i in range(n_segments):
-        start = max(0, (i * max_segment_len) - 10) * 1000
+        start = max(0, (i * max_segment_len) - 5) * 1000
         end = ((i + 1) * max_segment_len) * 1000
         clip = audio[start:end]
 

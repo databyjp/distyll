@@ -1,8 +1,11 @@
+import json
+
 from distyll.utils import get_arxiv_title
 from distyll.utils import (
     get_transcripts_from_audio_file,
-    get_youtube_title,
+    get_youtube_metadata,
     download_youtube,
+    init_dl_dir
 )
 from pypdf import PdfReader
 from typing import Union, Dict
@@ -14,12 +17,6 @@ import distyll.loggerconfig
 
 DL_DIR = "dl_data"
 
-
-def init_dl_dir(dir_path: Union[str, Path]) -> Path:
-    if type(dir_path) is str:
-        dir_path = Path(dir_path)
-    dir_path.mkdir(parents=True, exist_ok=True)
-    return dir_path
 
 
 def _download_pdf(pdf_url: str, dl_dir: Union[str, Path] = DL_DIR) -> Path:
@@ -73,9 +70,10 @@ def _parse_pdf(pdf_path: Union[Path, str]) -> str:
 
 def download_and_parse_pdf(pdf_url: str) -> str:
     """
-    Get the text from a PDF and parse it
-    :param pdf_url:
-    :return:
+    Downloads a PDF file from the specified URL and parses its text content.
+
+    :param pdf_url: The URL of the PDF file to download and parse.
+    :return: The parsed text content of the PDF file.
     """
     logging.info(f"Downloading and reading text from {pdf_url}")
     pdf_path = _download_pdf(pdf_url)
@@ -85,9 +83,10 @@ def download_and_parse_pdf(pdf_url: str) -> str:
 
 def get_arxiv_paper(arxiv_url: str) -> Union[Dict[str, str], None]:
     """
-    Get arXiv paper text
-    :param arxiv_url: Paper URL, e.g. 'https://arxiv.org/pdf/2305.15334' or 'https://arxiv.org/pdf/2305.15334.pdf'
-    :return:
+    Retrieve arXiv paper information.
+
+    :param arxiv_url: The URL of the arXiv paper.
+    :return: A dictionary containing the title, URL, and text of the arXiv paper.
     """
     logging.info(f"Getting arXiV paper from {arxiv_url}")
     if "arxiv.org" not in arxiv_url:
@@ -115,25 +114,49 @@ def get_arxiv_paper(arxiv_url: str) -> Union[Dict[str, str], None]:
 
 
 def get_youtube_transcript(
-    yt_url: str, dl_dir: Union[str, Path] = DL_DIR
+    yt_url: str, dl_dir: Union[str, Path] = DL_DIR, openai_apikey: str = None
 ) -> Dict[str, str]:
+    """
+    Retrieves the transcript of a YouTube video.
+
+    :param yt_url: The URL of the YouTube video.
+    :param dl_dir: (Optional) The directory to download the video to.
+    :param openai_apikey: (Optional) OpenAI API key.
+    :return: A dictionary containing the video title, the YouTube URL, and the transcript texts.
+    """
     logging.info(f"Processing {yt_url}, just getting the video title.")
     # Set up download
     dl_dir = init_dl_dir(dl_dir)
-    yt_filename = yt_url.split("/")[-1] + ".mp3"
-    out_path = Path(dl_dir) / yt_filename
+    video_id = yt_url.split("/")[-1]
+    transcript_json = video_id + ".json"
+    transcript_json_path = Path(dl_dir) / transcript_json
+    yt_filename = video_id + ".mp3"
+    yt_out_path = Path(dl_dir) / yt_filename
 
-    # Does file exist already
-    if out_path.exists():
-        logging.info(f"Already downloaded {yt_filename}, just getting the video title.")
-        video_title = get_youtube_title(youtube_url=yt_url)
+    if not transcript_json_path.exists():
+        if yt_out_path.exists():
+            logging.info(f"Already downloaded {yt_filename}, just getting the video title.")
+            video_metadata = get_youtube_metadata(youtube_url=yt_url)
+        else:
+            logging.info(f"Downloading {yt_filename}, just getting the video title.")
+            video_metadata = download_youtube(youtube_url=yt_url, path_out=yt_out_path)
+
+        video_title = video_metadata["title"]
+        video_date = video_metadata["upload_date"]
+        video_uploader = video_metadata["uploader"]
+        channel = video_metadata["channel"]
+
+        transcript_texts = get_transcripts_from_audio_file(yt_out_path, openai_apikey=openai_apikey)
+        transcript_data = {
+            "title": video_title,
+            "date": video_date,
+            "yt_url": yt_url,
+            "uploader": video_uploader,
+            "channel": channel,
+            "transcripts": transcript_texts,
+        }
+        transcript_json_path.write_text(json.dumps(transcript_data))
+        return transcript_data
     else:
-        logging.info(f"Downloading {yt_filename}, just getting the video title.")
-        video_title = download_youtube(youtube_url=yt_url, path_out=out_path)
-
-    transcript_texts = get_transcripts_from_audio_file(out_path)
-    return {
-        "title": video_title,
-        "yt_url": yt_url,
-        "transcripts": transcript_texts,
-    }
+        logging.info(f"Already downloaded {video_id}")
+        return json.loads(transcript_json_path.read_text())
