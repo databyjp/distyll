@@ -203,7 +203,9 @@ def get_youtube_metadata(youtube_url: str) -> Dict[str, str]:
 
 
 def get_transcripts_from_audio_file(
-    audio_file_path: Path, max_segment_len: int = 900, openai_apikey: Union[str, None] = None,
+    audio_file_path: Path,
+    max_segment_len: int = 900,
+    openai_apikey: Union[str, None] = None,
 ) -> List[str]:
     """
     Get transcripts of audio files using
@@ -220,8 +222,7 @@ def get_transcripts_from_audio_file(
         logging.info(f"Processing transcript {i+1} of {len(clip_outpaths)}...")
         with clip_outpath.open("rb") as audio_file:
             transcript = oai_client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file
+                model="whisper-1", file=audio_file
             )
             transcript_texts.append(transcript.text)
 

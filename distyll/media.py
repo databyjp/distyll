@@ -5,7 +5,7 @@ from distyll.utils import (
     get_transcripts_from_audio_file,
     get_youtube_metadata,
     download_youtube,
-    init_dl_dir
+    init_dl_dir,
 )
 from pypdf import PdfReader
 from typing import Union, Dict
@@ -16,7 +16,6 @@ import distyll.loggerconfig
 
 
 DL_DIR = "dl_data"
-
 
 
 def _download_pdf(pdf_url: str, dl_dir: Union[str, Path] = DL_DIR) -> Path:
@@ -135,7 +134,9 @@ def get_youtube_transcript(
 
     if not transcript_json_path.exists():
         if yt_out_path.exists():
-            logging.info(f"Already downloaded {yt_filename}, just getting the video title.")
+            logging.info(
+                f"Already downloaded {yt_filename}, just getting the video title."
+            )
             video_metadata = get_youtube_metadata(youtube_url=yt_url)
         else:
             logging.info(f"Downloading {yt_filename}, just getting the video title.")
@@ -146,7 +147,9 @@ def get_youtube_transcript(
         video_uploader = video_metadata["uploader"]
         channel = video_metadata["channel"]
 
-        transcript_texts = get_transcripts_from_audio_file(yt_out_path, openai_apikey=openai_apikey)
+        transcript_texts = get_transcripts_from_audio_file(
+            yt_out_path, openai_apikey=openai_apikey
+        )
         transcript_data = {
             "title": video_title,
             "date": video_date,
