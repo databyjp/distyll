@@ -1,6 +1,7 @@
 from weaviate import WeaviateClient
 from weaviate.classes.config import Property, DataType, Configure
 import distyll
+from distyll.utils import chunk_text
 
 def prep_db(client: WeaviateClient):
     if client.collections.exists("KnowledgeChunk"):
@@ -25,15 +26,16 @@ def add_yt_to_db(client: WeaviateClient, yt_url):
     chunk_no = 0
     with chunks_collection.batch.fixed_size() as batch:
         for t in transcript_data["transcripts"]:
-            for _, chunk in enumerate(distyll.chunk_text(transcript_data["text"])):
-                batch.add_object(
-                    properties={
-                        "title": transcript_data["title"],
-                        "url": transcript_data["title"],
-                        "chunk": chunk,
-                        "chunk_no": chunk_no,
-                    }
-                )
-                chunk_no += 1
+            for _, transcript in enumerate(transcript_data["transcripts"]):
+                for chunk in chunk_text(transcript):
+                    batch.add_object(
+                        properties={
+                            "title": transcript_data["title"],
+                            "url": transcript_data["title"],
+                            "chunk": chunk,
+                            "chunk_no": chunk_no,
+                        }
+                    )
+                    chunk_no += 1
     print(f"Added {chunk_no} chunks to the database")
     return chunk_no
