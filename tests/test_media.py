@@ -87,7 +87,11 @@ youtube_testdata = [
     (
         "https://youtu.be/enRb6fp5_hw",
         "Stanford XCS224U",
-    )
+    ),
+    (
+        "https://www.youtube.com/watch?v=EYXQmbZNhy8",
+        "c",
+    ),
 ]
 
 

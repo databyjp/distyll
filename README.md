@@ -2,10 +2,12 @@ For the old version - please see the `distyll_old` branch.
 
 ## Installation
 
-Install `ffmpeg`
-Install packages from `requirements.txt`:
+Install `ffmpeg` (`brew install ffmpeg` on macOS)
+Install packages from `requirements.txt` (`pip install -r requirements.txt`)
 
 ## Usage
+
+See `demo.ipynb` for an example.
 
 - download_and_parse_pdf(pdf_url) -> pdf_text
 - get_arxiv_paper(arxiv_url) -> {"title": title, "url": arxiv_url, "text": pdf_text}
