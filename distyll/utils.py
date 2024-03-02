@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from typing import Union, List, Dict, Any
+from typing import Union, List, Dict, Any, Literal
 import requests
 import logging
 import distyll.loggerconfig
@@ -84,27 +84,27 @@ def chunk_text_by_num_words(
     return chunks_list
 
 
-# def chunk_text_by_num_chars(source_text: str, max_chunk_chars: int = 300, overlap_fraction: float = 0.25) -> List[str]:
-#     """
-#     Chunk text input into a list of strings
-#     :param source_text: Input string to be chunked
-#     :param max_chunk_chars: Maximum length of chunk, in words
-#     :param overlap_fraction: Overlap as a percentage of chunk_words
-#     :return: return a list of words
-#     """
-#     overlap_chars = int(max_chunk_chars * overlap_fraction)
-#
-#     source_text = source_text.strip()
-#     chunks_list = list()
-#
-#     n_chunks = ((len(source_text) - 1 + overlap_chars) // max_chunk_chars) + 1
-#     for i in range(n_chunks):
-#         chunk = source_text[
-#                 max(max_chunk_chars * i - overlap_chars, 0):
-#                 max_chunk_chars * (i + 1)
-#                 ]
-#         chunks_list.append(chunk)
-#     return chunks_list
+def chunk_text_by_num_chars(source_text: str, max_chunk_chars: int = 300, overlap_fraction: float = 0.25) -> List[str]:
+    """
+    Chunk text input into a list of strings
+    :param source_text: Input string to be chunked
+    :param max_chunk_chars: Maximum length of chunk, in words
+    :param overlap_fraction: Overlap as a percentage of chunk_words
+    :return: return a list of words
+    """
+    overlap_chars = int(max_chunk_chars * overlap_fraction)
+
+    source_text = source_text.strip()
+    chunks_list = list()
+
+    n_chunks = ((len(source_text) - 1 + overlap_chars) // max_chunk_chars) + 1
+    for i in range(n_chunks):
+        chunk = source_text[
+                max(max_chunk_chars * i - overlap_chars, 0):
+                max_chunk_chars * (i + 1)
+                ]
+        chunks_list.append(chunk)
+    return chunks_list
 
 
 def remove_multiple_whitespaces(source_text: str) -> str:
@@ -119,15 +119,22 @@ def remove_multiple_whitespaces(source_text: str) -> str:
     return source_text
 
 
-def chunk_text(source_text: str) -> List[str]:
+def chunk_text(source_text: str, method: Literal["words", "chars"], token_length: Union[None, int] = None) -> List[str]:
     """
     Chunk longer text
-    :param source_text:
+    :param source_text: Input text
+    :param method: "words" or "chars"
+    :param token_length: Number of tokens to chunk by
     :return:
     """
-    logging.info(f"Chunking text of {len(source_text)} characters.")
+    logging.info(f"Chunking text of {len(source_text)} characters with {method} method.")
     source_text = remove_multiple_whitespaces(source_text)
-    return chunk_text_by_num_words(source_text)
+    if method == "words":
+        return chunk_text_by_num_words(source_text, max_chunk_words=token_length)
+    elif method == "chars":
+        return chunk_text_by_num_chars(source_text, max_chunk_chars=token_length)
+    else:
+        raise ValueError(f"Unsupported method: {method}")
 
 
 def clean_yt_url(url: str) -> str:

@@ -3,8 +3,15 @@ from weaviate.classes.config import Property, DataType, Configure
 from weaviate.util import generate_uuid5
 import distyll
 from distyll.utils import chunk_text
+import config
 
-def prep_db(client: WeaviateClient):
+
+def prep_db(client: WeaviateClient) -> None:
+    """
+    Prepare the database for use
+    :param client: Weaviate client
+    :return: None
+    """
     if client.collections.exists("TextChunk"):
         pass
     else:
@@ -17,11 +24,17 @@ def prep_db(client: WeaviateClient):
                 Property(name="chunk_no", data_type=DataType.INT),
             ],
             vectorizer_config=Configure.Vectorizer.text2vec_openai(),
-            generative_config=Configure.Generative.openai(model="gpt-4-1106-preview"),
+            generative_config=Configure.Generative.openai(model=config.load_gen_model()),
         )
 
 
-def add_yt_to_db(client: WeaviateClient, yt_url):
+def add_yt_to_db(client: WeaviateClient, yt_url) -> int:
+    """
+    Add a YouTube video to the database
+    :param client: Weaviate client
+    :param yt_url: YouTube URL
+    :return: Number of chunks added
+    """
     prep_db(client)
     transcript_data = distyll.get_youtube_transcript(yt_url)
     chunks_collection = client.collections.get("TextChunk")

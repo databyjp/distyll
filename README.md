@@ -5,6 +5,10 @@ For the old version - please see the `distyll_old` branch.
 Install `ffmpeg` (`brew install ffmpeg` on macOS)
 Install packages from `requirements.txt` (`pip install -r requirements.txt`)
 
+## Configuration
+
+Set parameters as appropriate in `config.json`
+
 ## Usage
 
 See `demo.ipynb` for an example.
