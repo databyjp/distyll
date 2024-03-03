@@ -248,14 +248,16 @@ def download_youtube_video(youtube_url: str, path_out: Path) -> str:
     return video_title
 
 
-def get_audio_from_video(video_path: Union[str, Path]):
+def get_audio_from_video(video_path: Union[str, Path]) -> Path:
     from moviepy.editor import VideoFileClip
 
     if type(video_path) == str:
-        video_path = Path(video_path)
+        video_pathobj = Path(video_path)
+    else:
+        video_pathobj = Path(video_path)
 
-    audio_path = video_path.with_suffix(".mp3")
-    video = VideoFileClip(video_path)
+    audio_path = video_pathobj.with_suffix(".mp3")
+    video = VideoFileClip(str(video_pathobj))
 
     audio = video.audio
     audio.write_audiofile(audio_path)
