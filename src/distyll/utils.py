@@ -10,6 +10,9 @@ import yt_dlp
 import os
 
 
+OPENAI_APIKEY = None
+
+
 def init_dl_dir(dir_path: Union[str, Path]) -> Path:
     """
     Initializes the download directory.
@@ -26,11 +29,39 @@ def init_dl_dir(dir_path: Union[str, Path]) -> Path:
     return dir_path
 
 
+def set_api_key(openai: str = None) -> bool:
+    """
+    Set the OpenAI API key as an environment variable.
+
+    Args:
+        openai (str): The OpenAI API key.
+
+    Returns:
+        bool: True if the OpenAI API key is set, False otherwise.
+    """
+    if openai is not None:
+        global OPENAI_APIKEY
+        OPENAI_APIKEY = openai
+        return True
+    return False
+
+
 def get_openai_client(apikey: Union[str, None] = None) -> OpenAI:
-    if apikey is None:
-        oai_client = OpenAI(api_key=os.getenv("OPENAI_APIKEY"))
-    else:
+    """
+    Helper function to get an OpenAI client
+    :param apikey:
+    :return:
+    """
+    global OPENAI_APIKEY
+    if apikey is not None:
         oai_client = OpenAI(api_key=apikey)
+    elif OPENAI_APIKEY is not None:
+        oai_client = OpenAI(api_key=OPENAI_APIKEY)
+    else:
+        if os.getenv("OPENAI_APIKEY") is not None:
+            oai_client = OpenAI(api_key=os.getenv("OPENAI_APIKEY"))
+        else:
+            raise ValueError("OpenAI API key not provided.")
     return oai_client
 
 
