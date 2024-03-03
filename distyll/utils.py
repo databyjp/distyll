@@ -84,7 +84,9 @@ def chunk_text_by_num_words(
     return chunks_list
 
 
-def chunk_text_by_num_chars(source_text: str, max_chunk_chars: int = 300, overlap_fraction: float = 0.25) -> List[str]:
+def chunk_text_by_num_chars(
+    source_text: str, max_chunk_chars: int = 300, overlap_fraction: float = 0.25
+) -> List[str]:
     """
     Chunk text input into a list of strings
     :param source_text: Input string to be chunked
@@ -100,9 +102,8 @@ def chunk_text_by_num_chars(source_text: str, max_chunk_chars: int = 300, overla
     n_chunks = ((len(source_text) - 1 + overlap_chars) // max_chunk_chars) + 1
     for i in range(n_chunks):
         chunk = source_text[
-                max(max_chunk_chars * i - overlap_chars, 0):
-                max_chunk_chars * (i + 1)
-                ]
+            max(max_chunk_chars * i - overlap_chars, 0) : max_chunk_chars * (i + 1)
+        ]
         chunks_list.append(chunk)
     return chunks_list
 
@@ -119,7 +120,11 @@ def remove_multiple_whitespaces(source_text: str) -> str:
     return source_text
 
 
-def chunk_text(source_text: str, method: Literal["words", "chars"], token_length: Union[None, int] = None) -> List[str]:
+def chunk_text(
+    source_text: str,
+    method: Literal["words", "chars"],
+    token_length: Union[None, int] = None,
+) -> List[str]:
     """
     Chunk longer text
     :param source_text: Input text
@@ -127,7 +132,9 @@ def chunk_text(source_text: str, method: Literal["words", "chars"], token_length
     :param token_length: Number of tokens to chunk by
     :return:
     """
-    logging.info(f"Chunking text of {len(source_text)} characters with {method} method.")
+    logging.info(
+        f"Chunking text of {len(source_text)} characters with {method} method."
+    )
     source_text = remove_multiple_whitespaces(source_text)
     if method == "words":
         return chunk_text_by_num_words(source_text, max_chunk_words=token_length)
@@ -155,7 +162,7 @@ def download_youtube(youtube_url: str, path_out: Path) -> str:
     """
     Download a YouTube video's audio and return its title
     :param youtube_url: URL of the YouTube video
-    :param path_out: Path where the audio file will be downloaded
+    :param path_out: Path where the audio file will be saved
     :return: Video title
     """
     path_template = str(path_out.absolute())
@@ -207,6 +214,56 @@ def get_youtube_metadata(youtube_url: str) -> Dict[str, str]:
         result = ydl.extract_info(youtube_url, download=False)
         metadata = extract_metadata(result)
     return metadata
+
+
+def download_youtube_video(youtube_url: str, path_out: Path) -> str:
+    """
+    Download a YouTube video's video
+    :param youtube_url: URL of the YouTube video
+    :param path_out: Path where the video file will be saved
+    :return: Video title
+    """
+    path_template = str(path_out.absolute())
+    if path_template.endswith(".mp4"):
+        path_template = path_template[
+            :-4
+        ]  # Just in case, but usually this should be handled externally
+
+    # Update yt_dlp parameters for video download
+    yt_dlp_params = {
+        "format": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]",  # Choose best video up to 1080p and best audio
+        "outtmpl": f"{path_template}.%(ext)s",  # Define output template
+        "quiet": True,
+        "cachedir": False,
+    }
+
+    with yt_dlp.YoutubeDL(yt_dlp_params) as video:
+        result = video.extract_info(youtube_url, download=True)
+        video_title = result.get(
+            "title", "Downloaded Video"
+        )  # Fallback to a default title if not available
+        logging.info(f"Found {video_title} - downloading")
+        logging.info(f"Successfully downloaded to {path_out}")
+
+    return video_title
+
+
+def get_audio_from_video(video_path: Union[str, Path]):
+    from moviepy.editor import VideoFileClip
+
+    if type(video_path) == str:
+        video_path = Path(video_path)
+
+    audio_path = video_path.with_suffix(".mp3")
+    video = VideoFileClip(video_path)
+
+    audio = video.audio
+    audio.write_audiofile(audio_path)
+
+    # Close the video file
+    video.close()
+
+    return audio_path
 
 
 def get_transcripts_from_audio_file(
@@ -269,3 +326,18 @@ def split_audio_files(audio_file_path: Path, max_segment_len: int = 900) -> List
         outfile.close()
         clip_outpaths.append(clip_outpath)
     return clip_outpaths
+
+
+def get_yt_video_name(input_str: str) -> str:
+    """
+    Get the YouTube video name from a URL
+    :param input_str:
+    :return:
+    """
+    if input_str.startswith("https://"):
+        input_str = input_str.split("https://")[-1]
+
+    if "watch?v=" in input_str:
+        return input_str.split("watch?v=")[-1]
+    else:
+        return input_str.split("/")[-1]

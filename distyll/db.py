@@ -3,7 +3,7 @@ from weaviate.classes.config import Property, DataType, Configure
 from weaviate.util import generate_uuid5
 import distyll
 from distyll.utils import chunk_text
-import config
+import distyll.config
 
 
 def prep_db(client: WeaviateClient) -> None:
@@ -24,7 +24,9 @@ def prep_db(client: WeaviateClient) -> None:
                 Property(name="chunk_no", data_type=DataType.INT),
             ],
             vectorizer_config=Configure.Vectorizer.text2vec_openai(),
-            generative_config=Configure.Generative.openai(model=config.load_gen_model()),
+            generative_config=Configure.Generative.openai(
+                model=distyll.config.load_gen_model()
+            ),
         )
 
 
@@ -50,7 +52,7 @@ def add_yt_to_db(client: WeaviateClient, yt_url) -> int:
                             "chunk": chunk,
                             "chunk_no": chunk_no,
                         },
-                        uuid=generate_uuid5(chunk)
+                        uuid=generate_uuid5(chunk),
                     )
                     chunk_no += 1
     print(f"Added {chunk_no} chunks to the database")

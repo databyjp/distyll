@@ -4,7 +4,9 @@ from distyll.media import (
     download_and_parse_pdf,
     get_arxiv_paper,
     get_youtube_transcript,
+    get_transcripts_from_video,
 )
+from distyll.utils import download_youtube_video, get_yt_video_name
 from pathlib import Path
 import pytest
 import logging
@@ -90,7 +92,7 @@ youtube_testdata = [
     ),
     (
         "https://www.youtube.com/watch?v=EYXQmbZNhy8",
-        "c",
+        "cake",
     ),
 ]
 
@@ -101,3 +103,12 @@ def test_get_youtube_transcript(yt_url, title):
     assert title in youtube_data["title"]
     assert yt_url in youtube_data["yt_url"]
     assert len(youtube_data["transcripts"][0]) > 1000
+
+
+@pytest.mark.parametrize("yt_url, title", youtube_testdata)
+def test_get_audio_from_video(yt_url, title):
+    video_path = Path("temp/dl_data") / (get_yt_video_name(yt_url) + ".mp4")
+    download_youtube_video(yt_url, video_path)
+    assert video_path.exists()
+    transcript = get_transcripts_from_video(video_path)
+    assert len(transcript[0]) > 1000
