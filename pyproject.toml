@@ -1,19 +1,25 @@
-# pyproject.toml
+[tool.poetry]
+name = "distyll-info"
+version = "0.1.0"
+description = "Information parsing assistant"
+authors = ["JP Hwang <61258750+databyjp@users.noreply.github.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "distyll", from="src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pypdf = "^4.1.0"
+openai = "^1.13.3"
+pydub = "^0.25.1"
+yt-dlp = "^2023.12.30"
+moviepy = "^1.0.3"
+beautifulsoup4 = "^4.12.3"
+weaviate-client = "^4.5.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.2"
 
 [build-system]
-requires      = ["setuptools>=61.0.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "distyll-info"
-version = "0.0.1"
-description = "Information digester assistant"
-readme = "README.md"
-authors = [{ name = "JP Hwang", email = "me@jphwang.com" }]
-dependencies = [
-    "weaviate-client", "pypdf", "beautifulsoup4", "yt-dlp", "pydub"
-]
-requires-python = ">=3.8"
-
-[tool.setuptools.packages.find]
-include = ["distyll"]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
