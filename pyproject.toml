@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "distyll-info"
-version = "0.1.2"
+version = "0.2.0"
 description = "Information parsing assistant"
 authors = ["JP Hwang <61258750+databyjp@users.noreply.github.com>"]
 license = "MIT"

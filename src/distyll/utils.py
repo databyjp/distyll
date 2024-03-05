@@ -2,7 +2,6 @@ from bs4 import BeautifulSoup
 from typing import Union, List, Dict, Any, Literal
 import requests
 import logging
-import distyll.loggerconfig
 from typing import Union
 from pathlib import Path
 from openai import OpenAI
@@ -173,12 +172,6 @@ def chunk_text(
         return chunk_text_by_num_chars(source_text, max_chunk_chars=token_length)
     else:
         raise ValueError(f"Unsupported method: {method}")
-
-
-def clean_yt_url(url: str) -> str:
-    url = url.lower()
-    url = url.split("?")[0]
-    return url
 
 
 def extract_metadata(video_info: Dict[str, Any]) -> Dict[str, Any]:
@@ -361,16 +354,30 @@ def split_audio_files(audio_file_path: Path, max_segment_len: int = 900) -> List
     return clip_outpaths
 
 
-def get_yt_video_name(input_str: str) -> str:
+def get_yt_video_id(input_str: str) -> str:
     """
-    Get the YouTube video name from a URL
+    Get the YouTube video ID (name) from a URL
     :param input_str:
     :return:
     """
-    if input_str.startswith("https://"):
-        input_str = input_str.split("https://")[-1]
+    output_str = input_str
 
-    if "watch?v=" in input_str:
-        return input_str.split("watch?v=")[-1]
+    # Remove the https:// if it exists
+    if output_str.startswith("https://"):
+        output_str = output_str.split("https://")[-1]
+
+    # Remove the prefix
+    if "watch?v=" in output_str:
+        output_str = output_str.split("watch?v=")[-1]
     else:
-        return input_str.split("/")[-1]
+        output_str = output_str.split("/")[-1]
+
+    # Remove the suffix
+    if "?" in output_str:
+        output_str = output_str.split("?")[0]
+
+    # Return the string
+    if len(output_str) == 11:
+        return output_str
+    else:
+        raise ValueError(f"Error parsing the video ID from {input_str}")

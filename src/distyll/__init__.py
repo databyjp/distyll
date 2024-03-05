@@ -1,13 +1,18 @@
-from distyll.media import (
-    get_youtube_transcript,
-    get_arxiv_paper,
-    download_and_parse_pdf,
-    get_transcripts_from_video,
+import distyll.loggerconfig
+
+from distyll.transcripts import (
+    from_youtube,
+    from_local_video,
+)
+
+from distyll.text import (
+    from_arxiv_paper,
+    from_pdf,
 )
 
 __all__ = [
-    "get_youtube_transcript",
-    "get_arxiv_paper",
-    "download_and_parse_pdf",
-    "get_transcripts_from_video",
+    "from_youtube",
+    "from_local_video",
+    "from_arxiv_paper",
+    "from_pdf",
 ]

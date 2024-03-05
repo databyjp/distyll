@@ -1,12 +1,12 @@
-from distyll.media import (
+from distyll.transcripts import from_local_video, from_youtube
+
+from distyll.text import (
     _download_pdf,
     _parse_pdf,
-    download_and_parse_pdf,
-    get_arxiv_paper,
-    get_youtube_transcript,
-    get_transcripts_from_video,
+    from_pdf,
+    from_arxiv_paper,
 )
-from distyll.utils import download_youtube_video, get_yt_video_name
+from distyll.utils import download_youtube_video, get_yt_video_id
 from pathlib import Path
 import pytest
 import logging
@@ -58,8 +58,8 @@ pdf_data = [
 
 
 @pytest.mark.parametrize("pdf_url, val_strings", pdf_data)
-def test_download_and_read_pdf(pdf_url, val_strings):
-    pdf_str = download_and_parse_pdf(pdf_url)
+def test_text_from_pdf(pdf_url, val_strings):
+    pdf_str = from_pdf(pdf_url)
     for val_str in val_strings:
         assert val_str in pdf_str
 
@@ -77,8 +77,8 @@ arxiv_data = [
 
 
 @pytest.mark.parametrize("pdf_url, val_strings, title", arxiv_data)
-def test_get_arxiv_paper(pdf_url, val_strings, title):
-    arxiv_data = get_arxiv_paper(pdf_url)
+def test_text_from_arxiv_paper(pdf_url, val_strings, title):
+    arxiv_data = from_arxiv_paper(pdf_url)
     for val_str in val_strings:
         assert val_str in arxiv_data["text"]
     assert arxiv_data["title"] == title
@@ -98,17 +98,17 @@ youtube_testdata = [
 
 
 @pytest.mark.parametrize("yt_url, title", youtube_testdata)
-def test_get_youtube_transcript(yt_url, title):
-    youtube_data = get_youtube_transcript(yt_url)
+def test_transcripts_from_youtube(yt_url, title):
+    youtube_data = from_youtube(yt_url)
     assert title in youtube_data["title"]
     assert yt_url in youtube_data["yt_url"]
     assert len(youtube_data["transcripts"][0]) > 1000
 
 
 @pytest.mark.parametrize("yt_url, _", youtube_testdata)
-def test_get_audio_from_video(yt_url, _):
-    video_path = Path("temp/dl_data") / (get_yt_video_name(yt_url) + ".mp4")
+def test_transcripts_from_local_video(yt_url, _):
+    video_path = Path("temp/dl_data") / (get_yt_video_id(yt_url) + ".mp4")
     download_youtube_video(yt_url, video_path)
     assert video_path.exists()
-    transcript = get_transcripts_from_video(video_path)
+    transcript = from_local_video(video_path)
     assert len(transcript[0]) > 1000

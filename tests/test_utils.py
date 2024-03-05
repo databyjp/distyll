@@ -1,5 +1,5 @@
 import pytest
-from distyll.utils import download_youtube_video, get_yt_video_name, get_openai_client, set_api_key
+from distyll.utils import download_youtube_video, get_yt_video_id, get_openai_client, set_api_key
 import logging
 import distyll.loggerconfig
 from pathlib import Path
@@ -20,7 +20,7 @@ youtube_testdata = [
 
 @pytest.mark.parametrize("yt_url, title", youtube_testdata)
 def test_yt_video_download(yt_url, title):
-    video_path = Path("temp/dl_data") / (get_yt_video_name(yt_url) + ".mp4")
+    video_path = Path("temp/dl_data") / (get_yt_video_id(yt_url) + ".mp4")
     download_youtube_video(yt_url, video_path)
 
 

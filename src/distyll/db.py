@@ -38,7 +38,7 @@ def add_yt_to_db(client: WeaviateClient, yt_url) -> int:
     :return: Number of chunks added
     """
     prep_db(client)
-    transcript_data = distyll.get_youtube_transcript(yt_url)
+    transcript_data = distyll.from_youtube(yt_url)
     chunks_collection = client.collections.get("TextChunk")
     chunk_no = 0
     with chunks_collection.batch.fixed_size() as batch:
