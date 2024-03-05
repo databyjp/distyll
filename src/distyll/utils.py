@@ -152,8 +152,8 @@ def remove_multiple_whitespaces(source_text: str) -> str:
 
 def chunk_text(
     source_text: str,
-    method: Literal["words", "chars"],
-    token_length: Union[None, int] = None,
+    method: Literal["words", "chars"] = "words",
+    token_length: Union[None, int] = 100,
 ) -> List[str]:
     """
     Chunk longer text
