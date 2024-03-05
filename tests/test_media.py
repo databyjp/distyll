@@ -1,6 +1,6 @@
 from distyll.transcripts import from_local_video, from_youtube
 
-from distyll.text import (
+from distyll.text.text import (
     _download_pdf,
     _parse_pdf,
     from_pdf,
