@@ -5,10 +5,10 @@ Install the package with `pip install distyll-info`
 
 ## Usage
 
-- download_and_parse_pdf(pdf_url) -> pdf_text
-- get_arxiv_paper(arxiv_url) -> {"title": title, "url": arxiv_url, "text": pdf_text}
-- get_youtube_transcript(youtube_url) -> {"title": title, "date": date, "yt_url": youtube_url, "uploader": uploader, "channel": channel, "transcripts": List[transcript]}
-- get_video_transcript(video_url) -> List[transcript]
+- distyll.text.from_pdf(pdf_url) -> pdf_text
+- distyll.text.from_arxiv_paper(arxiv_url) -> {"title": title, "url": arxiv_url, "text": pdf_text}
+- distyll.transcripts.from_youtube(youtube_url) -> {"title": title, "date": date, "yt_url": youtube_url, "uploader": uploader, "channel": channel, "transcripts": List[transcript]}
+- distyll.transcripts.from_local_video(video_url) -> List[transcript]
 
 Please see the docstrings for more information.
 
