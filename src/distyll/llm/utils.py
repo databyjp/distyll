@@ -2,7 +2,9 @@ from distyll.utils import get_openai_client, chunk_text
 from typing import Dict, Union
 
 
-def ask_openai(prompt: str, system_prompt: Dict[str, str], model: Union[str, None] = None) -> str:
+def ask_openai(
+    prompt: str, system_prompt: Dict[str, str] = None, model: Union[str, None] = None
+) -> str:
     """
     Ask OpenAI for a response to a prompt
     Args:
@@ -27,7 +29,13 @@ def ask_openai(prompt: str, system_prompt: Dict[str, str], model: Union[str, Non
     return completion.choices[0].message.content
 
 
-def summarize_text(text: str, max_chunk_len: int = 1000, overlap: float = 0.1, summary_prompt: Dict[str, str] = None) -> str:
+def summarize_text(
+    text: str,
+    max_chunk_len: int = 1000,
+    overlap: float = 0.1,
+    summary_prompt: Dict[str, str] = None,
+    number_of_points: int = 3,
+) -> str:
     """
     Recursively summarise a text by chunking it into smaller parts and summarising each part
     Args:
@@ -40,16 +48,24 @@ def summarize_text(text: str, max_chunk_len: int = 1000, overlap: float = 0.1, s
         str: Summarised text
     """
 
-    if not summary_prompt:
-        summary_prompt = {
-            "role": "system",
-            "content": "Summarize the provided text into a few key points and return it to the user. ",
-        }
-
-    chunks = chunk_text(text, method="words", token_length=max_chunk_len, overlap_fraction=overlap)
+    chunks = chunk_text(
+        text, method="words", token_length=max_chunk_len, overlap_fraction=overlap
+    )
 
     if len(chunks) == 1:
+        if not summary_prompt:
+            summary_prompt = {
+                "role": "system",
+                "content": f"Summarize the provided text into a maximum of {number_of_points} short key points for the user. ",
+            }
         return ask_openai(chunks[0], summary_prompt)
     else:
-        summaries = [summarize_text(chunk, summary_prompt=summary_prompt) for chunk in chunks]
+        chunk_summary_prompt = {
+            "role": "system",
+            "content": "Summarize the provided text into a succinct set of key points. ",
+        }
+        summaries = [
+            summarize_text(chunk, summary_prompt=chunk_summary_prompt)
+            for chunk in chunks
+        ]
         return " ".join(summaries)

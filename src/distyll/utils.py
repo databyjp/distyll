@@ -87,13 +87,14 @@ def get_arxiv_title(arxiv_url: str) -> Union[str, None]:
 
 
 def chunk_text_by_num_words(
-    source_text: str, max_chunk_words: int = 100, overlap_fraction: float = 0.25
+    source_text: str, max_chunk_words: int = 100, overlap_fraction: float = 0.25, prevent_short_last_chunks: bool = True
 ) -> List[str]:
     """
     Chunk text input into a list of strings, using a number of words
     :param source_text: Input string to be chunked
     :param max_chunk_words: Maximum length of chunk, in words
     :param overlap_fraction: Overlap as a percentage of chunk_words. The overlap is prepended to each chunk.
+    :param prevent_short_last_chunks: Prevent very short last chunks
     :return: return a list of words
     """
     logging.info(f"Chunking text of {len(source_text)} chars by number of words.")
@@ -109,7 +110,25 @@ def chunk_text_by_num_words(
         window_words = word_list[
             max(max_chunk_words * i - overlap_words, 0) : max_chunk_words * (i + 1)
         ]
-        chunks_list.append(sep.join(window_words))
+        if prevent_short_last_chunks:
+            # Conditional logic to handle the last two chunks and prevent very short chunks
+            if i < n_chunks - 2:
+                chunks_list.append(sep.join(window_words))
+            else:  # Second to last chunk onwards
+                remaining_words = word_list[max(max_chunk_words * i - overlap_words, 0) :]
+                if len(remaining_words) <= max_chunk_words:
+                    chunks_list.append(sep.join(remaining_words))
+                    break
+                second_last_chunk = remaining_words[
+                    : len(remaining_words) // 2 + overlap_words
+                ]
+                last_chunk = remaining_words[len(remaining_words) // 2 :]
+                chunks_list.append(sep.join(second_last_chunk))
+                chunks_list.append(sep.join(last_chunk))
+                break
+        else:
+            chunks_list.append(sep.join(window_words))
+
     return chunks_list
 
 
