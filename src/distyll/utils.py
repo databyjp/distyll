@@ -2,7 +2,6 @@ from bs4 import BeautifulSoup
 from typing import Union, List, Dict, Any, Literal
 import requests
 import logging
-from typing import Union
 from pathlib import Path
 from openai import OpenAI
 import yt_dlp
@@ -154,12 +153,14 @@ def chunk_text(
     source_text: str,
     method: Literal["words", "chars"] = "words",
     token_length: Union[None, int] = 100,
+    overlap_fraction: float = 0.25,
 ) -> List[str]:
     """
     Chunk longer text
     :param source_text: Input text
     :param method: "words" or "chars"
     :param token_length: Number of tokens to chunk by
+    :param overlap_fraction: Overlap as a percentage of chunk
     :return:
     """
     logging.info(
@@ -167,9 +168,13 @@ def chunk_text(
     )
     source_text = remove_multiple_whitespaces(source_text)
     if method == "words":
-        return chunk_text_by_num_words(source_text, max_chunk_words=token_length)
+        return chunk_text_by_num_words(
+            source_text, max_chunk_words=token_length, overlap_fraction=overlap_fraction
+        )
     elif method == "chars":
-        return chunk_text_by_num_chars(source_text, max_chunk_chars=token_length)
+        return chunk_text_by_num_chars(
+            source_text, max_chunk_chars=token_length, overlap_fraction=overlap_fraction
+        )
     else:
         raise ValueError(f"Unsupported method: {method}")
 
@@ -182,7 +187,7 @@ def extract_metadata(video_info: Dict[str, Any]) -> Dict[str, Any]:
     return metadata
 
 
-def download_youtube(youtube_url: str, path_out: Path) -> str:
+def download_youtube(youtube_url: str, path_out: Path) -> Dict[str, Any]:
     """
     Download a YouTube video's audio and return its title
     :param youtube_url: URL of the YouTube video

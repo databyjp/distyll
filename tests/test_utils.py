@@ -1,5 +1,10 @@
 import pytest
-from distyll.utils import download_youtube_video, get_yt_video_id, get_openai_client, set_api_key
+from distyll.utils import (
+    download_youtube_video,
+    get_yt_video_id,
+    get_openai_client,
+    set_api_key,
+)
 import logging
 import distyll.loggerconfig
 from pathlib import Path
