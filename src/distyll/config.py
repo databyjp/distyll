@@ -1,4 +1,5 @@
 DL_DIR = "dl_data"
+COLLECTION_NAME = "TextChunk"
 
 
 def load_gen_model() -> str:
