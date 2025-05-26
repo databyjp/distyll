@@ -43,6 +43,7 @@ def summarize_text(
         max_chunk_len:
         overlap:
         summary_prompt:
+        number_of_points:
 
     Returns:
         str: Summarised text
