@@ -22,3 +22,29 @@ OpenAI: Audio -> text functionalities make use of OpenAI's Whisper. You will nee
 ## What happened to the old version?
 
 Sorry! I'm working on making this more streamlined and better. For the old version, please see the `distyll_old` branch.
+
+## Contributor guide
+
+### Updating dependencies
+
+This project uses Poetry for package management.
+
+To see what packages can be updated, run:
+
+```bash
+poetry show --outdated
+```
+
+Then, run this to update all packages to their latest compatible versions within the constraints defined in `pyproject.toml`.
+
+```bash
+poetry update
+```
+
+### Tests
+
+Run tests with:
+
+```bash
+pytest
+```
